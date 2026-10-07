@@ -10,7 +10,7 @@ plugins {
 def tagName = '0.0.6'
 
 android {
-    compileSdk 34
+    compileSdk 36 // libxposed 101 requires it; targetSdk is what changes runtime behaviour
     defaultConfig {
         applicationId "io.github.jqssun.gpssetter"
         minSdk 27
@@ -87,9 +87,9 @@ android {
 
 dependencies {
 
-    // temporary foss xposed fix from https://github.com/deltazefiro/Amarok-Hider/issues/160
-    // compileOnly 'de.robv.android.xposed:api:82'
-    compileOnly 'com.github.deltazefiro:XposedBridge:main-SNAPSHOT'
+    // modern xposed api (LSPosed 2.x / Vector); service carries settings from the app to the hook
+    compileOnly 'io.github.libxposed:api:101.0.1'
+    implementation 'io.github.libxposed:service:101.0.0'
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
 
     // use microg (apache 2.0) and maplibre (bsd 2-clause)

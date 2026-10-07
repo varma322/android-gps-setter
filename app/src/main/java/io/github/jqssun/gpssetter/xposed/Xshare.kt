@@ -1,50 +1,45 @@
 package io.github.jqssun.gpssetter.xposed
-import de.robv.android.xposed.XSharedPreferences
-import io.github.jqssun.gpssetter.BuildConfig
+import android.content.SharedPreferences
 
-class Xshare {
+// hook-side view of the settings the app mirrors into LSPosed remote preferences (see PrefManager)
+class Xshare(private val prefs: SharedPreferences) {
 
-    private var xPref: XSharedPreferences? = null
-
-    private fun pref() : XSharedPreferences {
-        xPref = XSharedPreferences(BuildConfig.APPLICATION_ID,"${BuildConfig.APPLICATION_ID}_prefs")
-        return xPref as XSharedPreferences
+    companion object {
+        const val GROUP = "settings"
     }
 
     val isStarted : Boolean
-    get() = pref().getBoolean(
+    get() = prefs.getBoolean(
         "start",
         false
     )
 
     val getLat: Double
-    get() = pref().getFloat(
+    get() = prefs.getFloat(
         "latitude",
         45.0000000.toFloat()
     ).toDouble()
 
 
     val getLng : Double
-    get() = pref().getFloat(
+    get() = prefs.getFloat(
         "longitude",
         0.0000000.toFloat()
     ).toDouble()
 
     val isHookedSystem : Boolean
-    get() = pref().getBoolean(
+    get() = prefs.getBoolean(
         "system_hooked",
         true
     )
 
     val isRandomPosition :Boolean
-    get() = pref().getBoolean(
+    get() = prefs.getBoolean(
         "random_position",
         false
     )
 
     val accuracy : String?
-    get() = pref().getString("accuracy_level","10")
-
-    val reload = pref().reload()
+    get() = prefs.getString("accuracy_level","10")
 
 }

@@ -1,41 +1,39 @@
 package io.github.jqssun.gpssetter.xposed
 
-// https://github.com/rovo89/XposedBridge/wiki/Helpers
-
-import android.annotation.SuppressLint
-import android.app.AndroidAppHelper
-import android.content.Context
 import android.location.Location
 import android.location.LocationManager
 import android.location.LocationRequest
 import android.os.Build
-import de.robv.android.xposed.IXposedHookLoadPackage
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
-import de.robv.android.xposed.callbacks.XC_LoadPackage
+import android.os.SystemClock
+import android.util.Log
 import io.github.jqssun.gpssetter.BuildConfig
+import io.github.libxposed.api.XposedInterface.Chain
+import io.github.libxposed.api.XposedModule
 import org.lsposed.hiddenapibypass.HiddenApiBypass
-import timber.log.Timber
 import java.util.*
 import kotlin.math.cos
 
 object LocationHook {
 
+    private const val TAG = "GPS Setter"
     var newlat: Double = 45.0000
     var newlng: Double = 0.0000
     private const val pi = 3.14159265359
     private var accuracy: Float = 0.0f
     private val rand: Random = Random()
     private const val earth = 6378137.0
-    private val settings = Xshare()
+    private lateinit var module: XposedModule
+    private lateinit var settings: Xshare
     private var mLastUpdated: Long = 0
     private var started = false
     private val ignorePkg = arrayListOf("com.android.location.fused", BuildConfig.APPLICATION_ID)
 
-    private val context by lazy { AndroidAppHelper.currentApplication() as Context }
+    private fun init(xposed: XposedModule) {
+        module = xposed
+        settings = Xshare(xposed.getRemotePreferences(Xshare.GROUP))
+    }
 
-    // re-reads prefs at most once per interval, so start/stop and new locations apply without a reboot
+    // re-reads settings (and re-rolls the random offset) at most once per interval, so start/stop and new locations apply without a reboot
     private fun isActive(interval: Int): Boolean {
         if (System.currentTimeMillis() - mLastUpdated > interval) {
             updateLocation()
@@ -59,301 +57,131 @@ object LocationHook {
             accuracy = settings.accuracy!!.toFloat()
 
         } catch (e: Exception) {
-            Timber.tag("GPS Setter")
-                .e(e, "Failed to get XposedSettings for %s", context.packageName)
+            module.log(Log.ERROR, TAG, "Failed to read settings", e)
         }
     }
 
-    @SuppressLint("NewApi")
-    fun initHooks(lpparam: XC_LoadPackage.LoadPackageParam) {
+    // the spoofed fix; keeps timing/bearing from the real one when there is one
+    private fun fakeLocation(origin: Location? = null, provider: String = LocationManager.GPS_PROVIDER): Location {
+        val location = Location(origin?.provider ?: provider)
+        if (origin != null) {
+            location.time = origin.time
+            location.bearing = origin.bearing
+            location.bearingAccuracyDegrees = origin.bearingAccuracyDegrees
+            location.elapsedRealtimeNanos = origin.elapsedRealtimeNanos
+            location.verticalAccuracyMeters = origin.verticalAccuracyMeters
+        } else {
+            location.time = System.currentTimeMillis() - 300
+            location.elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        }
+        location.latitude = newlat
+        location.longitude = newlng
+        location.accuracy = accuracy
+        location.altitude = 0.0
+        location.speed = 0F
+        location.speedAccuracyMetersPerSecond = 0F
+        try {
+            HiddenApiBypass.invoke(location.javaClass, location, "setIsFromMockProvider", false)
+        } catch (e: Exception) {
+            module.log(Log.WARN, TAG, "unable to set mock $e")
+        }
+        return location
+    }
 
-        if (lpparam.packageName == "android") { XposedBridge.log("Hooking system server")
-        if (settings.isHookedSystem) {
-            val interval = 200
+    // for methods taking a single Location: hand the original our fake instead
+    private fun proceedWithFake(chain: Chain): Any? =
+        chain.proceed(arrayOf<Any?>(fakeLocation(chain.getArg(0) as Location?)))
 
-            if (Build.VERSION.SDK_INT < 34) {
+    // one missing method (ROM / version differences) shouldn't take the other hooks down with it
+    private inline fun safely(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            module.log(Log.WARN, TAG, "Skipping hook $what", t)
+        }
+    }
 
-                val LocationManagerServiceClass = XposedHelpers.findClass(
-                    "com.android.server.LocationManagerService",
-                    lpparam.classLoader
-                )
+    fun initSystemHooks(xposed: XposedModule, classLoader: ClassLoader) {
+        init(xposed)
+        module.log(Log.INFO, TAG, "Hooking system server")
+        if (!settings.isHookedSystem) return
+        val interval = 200
 
-                XposedHelpers.findAndHookMethod(
-                    LocationManagerServiceClass, "getLastLocation",
-                    LocationRequest::class.java, String::class.java,
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            if (!isActive(interval)) return
-                            val location = Location(LocationManager.GPS_PROVIDER)
-                            location.time = System.currentTimeMillis() - 300
-                            location.latitude = newlat
-                            location.longitude = newlng
-                            location.altitude = 0.0
-                            location.speed = 0F
-                            location.accuracy = accuracy
-                            location.speedAccuracyMetersPerSecond = 0F
-                            param.result = location
-                        }
-                    }
-                )
+        if (Build.VERSION.SDK_INT < 34) {
+            val lms = classLoader.loadClass("com.android.server.LocationManagerService")
 
-                for (method in LocationManagerServiceClass.declaredMethods) {
-                    if (method.returnType == Boolean::class.java) {
-                        if (method.name == "addGnssBatchingCallback" ||
-                            method.name == "addGnssMeasurementsListener" ||
-                            method.name == "addGnssNavigationMessageListener"
-                        ) {
-                            XposedBridge.hookMethod(
-                                method,
-                                object : XC_MethodHook() {
-                                    override fun beforeHookedMethod(param: MethodHookParam) {
-                                        if (isActive(interval)) param.result = false
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
+            safely("getLastLocation") {
+                module.hook(lms.getDeclaredMethod("getLastLocation", LocationRequest::class.java, String::class.java))
+                    .intercept { chain -> if (isActive(interval)) fakeLocation() else chain.proceed() }
+            }
 
-                XposedHelpers.findAndHookMethod(
-                    "com.android.server.LocationManagerService.Receiver", // com.android.server.LocationManagerService\$Receiver
-                    lpparam.classLoader,
-                    "callLocationChangedLocked",
-                    Location::class.java,
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            if (!isActive(interval)) return
-                            lateinit var location: Location
-                            lateinit var originLocation: Location
-                            if (param.args[0] == null) {
-                                location = Location(LocationManager.GPS_PROVIDER)
-                                location.time = System.currentTimeMillis() - 300
-                            } else {
-                                originLocation = param.args[0] as Location
-                                location = Location(originLocation.provider)
-                                location.time = originLocation.time
-                                location.accuracy = accuracy
-                                location.bearing = originLocation.bearing
-                                location.bearingAccuracyDegrees = originLocation.bearingAccuracyDegrees
-                                location.elapsedRealtimeNanos = originLocation.elapsedRealtimeNanos
-                                location.verticalAccuracyMeters = originLocation.verticalAccuracyMeters
-                            }
-
-                            location.latitude = newlat
-                            location.longitude = newlng
-                            location.altitude = 0.0
-                            location.speed = 0F
-                            location.speedAccuracyMetersPerSecond = 0F
-                            try {
-                                HiddenApiBypass.invoke(
-                                    location.javaClass, location, "setIsFromMockProvider", false
-                                )
-                            } catch (e: Exception) {
-                                XposedBridge.log("LocationHook: unable to set mock $e")
-                            }
-                            param.args[0] = location
-                        }
-                    }
-                )
-            } else {
-
-                val LocationManagerServiceClass = XposedHelpers.findClass(
-                    "com.android.server.location.LocationManagerService",
-                    lpparam.classLoader
-                )
-                for (method in LocationManagerServiceClass.declaredMethods) {
-                    if (method.name == "getLastLocation" && method.returnType == Location::class.java) {
-                        // params: String::class.java, LastLocationRequest::class.java, String::class.java, String::class.java
-                        XposedBridge.hookMethod(
-                            method,
-                            object : XC_MethodHook() {
-                                override fun beforeHookedMethod(param: MethodHookParam) {
-                                    if (!isActive(interval)) return
-                                    val location = Location(LocationManager.GPS_PROVIDER)
-                                    location.time = System.currentTimeMillis() - 300
-                                    location.latitude = newlat
-                                    location.longitude = newlng
-                                    location.altitude = 0.0
-                                    location.speed = 0F
-                                    location.accuracy = accuracy
-                                    location.speedAccuracyMetersPerSecond = 0F
-                                    param.result = location
-                                }
-                            }
-                        )
-                    } else if (method.returnType == Void.TYPE) {
-                        if (method.name == "startGnssBatch" ||
-                            method.name == "addGnssAntennaInfoListener" ||
-                            method.name == "addGnssMeasurementsListener" ||
-                            method.name == "addGnssNavigationMessageListener"
-                        ) {
-                            XposedBridge.hookMethod(
-                                method,
-                                object : XC_MethodHook() {
-                                    override fun beforeHookedMethod(param: MethodHookParam) {
-                                        if (isActive(interval)) param.result = null
-                                    }
-                                }
-                            )
-                        }
+            for (method in lms.declaredMethods) {
+                if (method.returnType == Boolean::class.java &&
+                    method.name in listOf("addGnssBatchingCallback", "addGnssMeasurementsListener", "addGnssNavigationMessageListener")
+                ) {
+                    safely(method.name) {
+                        module.hook(method).intercept { chain -> if (isActive(interval)) false else chain.proceed() }
                     }
                 }
-                XposedHelpers.findAndHookMethod(
-                    LocationManagerServiceClass,
-                    "injectLocation",
-                    Location::class.java,
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            if (!isActive(interval)) return
-                            lateinit var location: Location
-                            lateinit var originLocation: Location
-                            if (param.args[0] == null) {
-                                location = Location(LocationManager.GPS_PROVIDER)
-                                location.time = System.currentTimeMillis() - 300
-                            } else {
-                                originLocation = param.args[0] as Location
-                                location = Location(originLocation.provider)
-                                location.time = originLocation.time
-                                location.accuracy = accuracy
-                                location.bearing = originLocation.bearing
-                                location.bearingAccuracyDegrees = originLocation.bearingAccuracyDegrees
-                                location.elapsedRealtimeNanos = originLocation.elapsedRealtimeNanos
-                                location.verticalAccuracyMeters = originLocation.verticalAccuracyMeters
-                            }
+            }
 
-                            location.latitude = newlat
-                            location.longitude = newlng
-                            location.altitude = 0.0
-                            location.speed = 0F
-                            location.speedAccuracyMetersPerSecond = 0F
-                            try {
-                                HiddenApiBypass.invoke(
-                                    location.javaClass, location, "setIsFromMockProvider", false
-                                )
-                            } catch (e: Exception) {
-                                XposedBridge.log("LocationHook: unable to set mock $e")
-                            }
-                            param.args[0] = location
-                        }
+            safely("callLocationChangedLocked") {
+                val receiver = classLoader.loadClass("com.android.server.LocationManagerService\$Receiver")
+                module.hook(receiver.getDeclaredMethod("callLocationChangedLocked", Location::class.java))
+                    .intercept { chain -> if (isActive(interval)) proceedWithFake(chain) else chain.proceed() }
+            }
+        } else {
+            val lms = classLoader.loadClass("com.android.server.location.LocationManagerService")
+
+            for (method in lms.declaredMethods) {
+                if (method.name == "getLastLocation" && method.returnType == Location::class.java) {
+                    // params: String::class.java, LastLocationRequest::class.java, String::class.java, String::class.java
+                    safely(method.name) {
+                        module.hook(method).intercept { chain -> if (isActive(interval)) fakeLocation() else chain.proceed() }
                     }
-                )
+                } else if (method.returnType == Void.TYPE &&
+                    method.name in listOf("startGnssBatch", "addGnssAntennaInfoListener", "addGnssMeasurementsListener", "addGnssNavigationMessageListener")
+                ) {
+                    safely(method.name) {
+                        module.hook(method).intercept { chain -> if (isActive(interval)) null else chain.proceed() }
+                    }
+                }
+            }
+
+            safely("injectLocation") {
+                module.hook(lms.getDeclaredMethod("injectLocation", Location::class.java))
+                    .intercept { chain -> if (isActive(interval)) proceedWithFake(chain) else chain.proceed() }
             }
         }
-        } else { // application hook
+    }
 
-            val LocationClass = XposedHelpers.findClass(
-                "android.location.Location",
-                lpparam.classLoader
-            )
-            val interval = 80 // 200
+    fun initAppHooks(xposed: XposedModule, packageName: String) {
+        if (packageName in ignorePkg) return
+        init(xposed)
+        val interval = 80 // 200
 
-            for (method in LocationClass.declaredMethods) {
-                if (method.name == "getLatitude") {
-                    XposedBridge.hookMethod(
-                        method,
-                        object : XC_MethodHook() {
-                            override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
-                                    param.result = newlat
-                                }
-                            }
-                        }
-                    )
-                } else if (method.name == "getLongitude") {
-                    XposedBridge.hookMethod(
-                        method,
-                        object : XC_MethodHook() {
-                            override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
-                                    param.result = newlng
-                                }
-                            }
-                        }
-                    )
-                } else if (method.name == "getAccuracy") {
-                    XposedBridge.hookMethod(
-                        method,
-                        object : XC_MethodHook() {
-                            override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
-                                    param.result = accuracy
-                                }
-                            }
-                        }
-                    )
-                }
+        for (method in Location::class.java.declaredMethods) {
+            val spoofed: (() -> Any)? = when (method.name) {
+                "getLatitude" -> { -> newlat }
+                "getLongitude" -> { -> newlng }
+                "getAccuracy" -> { -> accuracy }
+                else -> null
             }
+            if (spoofed != null) safely(method.name) {
+                module.hook(method).intercept { chain -> if (isActive(interval)) spoofed() else chain.proceed() }
+            }
+        }
 
-            XposedHelpers.findAndHookMethod(
-                LocationClass,
-                "set",
-                Location::class.java,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+        safely("Location.set") {
+            module.hook(Location::class.java.getDeclaredMethod("set", Location::class.java))
+                .intercept { chain -> if (isActive(interval)) proceedWithFake(chain) else chain.proceed() }
+        }
 
-                        if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
-                            lateinit var location: Location
-                            lateinit var originLocation: Location
-                            if (param.args[0] == null) {
-                                location = Location(LocationManager.GPS_PROVIDER)
-                                location.time = System.currentTimeMillis() - 300
-                            } else {
-                                originLocation = param.args[0] as Location
-                                location = Location(originLocation.provider)
-                                location.time = originLocation.time
-                                location.accuracy = accuracy
-                                location.bearing = originLocation.bearing
-                                location.bearingAccuracyDegrees = originLocation.bearingAccuracyDegrees
-                                location.elapsedRealtimeNanos = originLocation.elapsedRealtimeNanos
-                                location.verticalAccuracyMeters = originLocation.verticalAccuracyMeters
-                            }
-
-                            location.latitude = newlat
-                            location.longitude = newlng
-                            location.altitude = 0.0
-                            location.speed = 0F
-                            location.speedAccuracyMetersPerSecond = 0F
-                            try {
-                                HiddenApiBypass.invoke(
-                                    location.javaClass, location, "setIsFromMockProvider", false
-                                )
-                            } catch (e: Exception) {
-                                XposedBridge.log("LocationHook: unable to set mock $e")
-                            }
-                            param.args[0] = location
-                        }
-                    }
+        safely("getLastKnownLocation") {
+            module.hook(LocationManager::class.java.getDeclaredMethod("getLastKnownLocation", String::class.java))
+                .intercept { chain ->
+                    if (isActive(interval)) fakeLocation(provider = chain.getArg(0) as String) else chain.proceed()
                 }
-            )
-
-            XposedHelpers.findAndHookMethod(
-                "android.location.LocationManager",
-                lpparam.classLoader,
-                "getLastKnownLocation",
-                String::class.java,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
-                            val provider = param.args[0] as String
-                            val location = Location(provider)
-                            location.time = System.currentTimeMillis() - 300
-                            location.latitude = newlat
-                            location.longitude = newlng
-                            location.altitude = 0.0
-                            location.speed = 0F
-                            location.speedAccuracyMetersPerSecond = 0F
-                            try {
-                                HiddenApiBypass.invoke(
-                                    location.javaClass, location, "setIsFromMockProvider", false
-                                )
-                            } catch (e: Exception) {
-                                XposedBridge.log("LocationHook: unable to set mock $e")
-                            }
-                            param.result = location
-                        }
-                    }
-                }
-            )
         }
     }
 }

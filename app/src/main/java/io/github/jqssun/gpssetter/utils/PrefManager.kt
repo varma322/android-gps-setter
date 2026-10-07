@@ -1,18 +1,20 @@
 package io.github.jqssun.gpssetter.utils
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.lifecycle.MutableLiveData
 import io.github.jqssun.gpssetter.BuildConfig
 import io.github.jqssun.gpssetter.gsApp
+import io.github.jqssun.gpssetter.xposed.Xshare
+import io.github.libxposed.service.XposedService
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 
-@SuppressLint("WorldReadableFiles")
 object PrefManager   {
 
     private const val START = "start"
@@ -28,20 +30,42 @@ object PrefManager   {
 
 
     private val pref: SharedPreferences by lazy {
-        try {
-            val prefsFile = "${BuildConfig.APPLICATION_ID}_prefs"
-            gsApp.getSharedPreferences(
-                prefsFile,
-                Context.MODE_WORLD_READABLE
-            )
-        }catch (e:SecurityException){
-            val prefsFile = "${BuildConfig.APPLICATION_ID}_prefs"
-            gsApp.getSharedPreferences(
-                prefsFile,
-                Context.MODE_PRIVATE
-            )
-        }
+        gsApp.getSharedPreferences("${BuildConfig.APPLICATION_ID}_prefs", Context.MODE_PRIVATE)
+    }
 
+    // the hook can't read app-private files, so the settings it needs are mirrored into
+    // LSPosed's remote preferences (libxposed service) whenever they change
+    @Volatile private var remote: SharedPreferences? = null
+    val moduleActive = MutableLiveData<Boolean>()
+    private val mirror = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> syncRemote() }
+
+    fun onServiceBind(service: XposedService) {
+        remote = try {
+            service.getRemotePreferences(Xshare.GROUP)
+        } catch (e: RuntimeException) {
+            Timber.e(e, "Remote preferences unavailable")
+            return
+        }
+        pref.registerOnSharedPreferenceChangeListener(mirror)
+        syncRemote()
+        moduleActive.postValue(true)
+    }
+
+    fun onServiceDied() {
+        remote = null
+        moduleActive.postValue(false)
+    }
+
+    private fun syncRemote() {
+        val remote = remote ?: return
+        remote.edit()
+            .putBoolean(START, isStarted)
+            .putFloat(LATITUDE, getLat.toFloat())
+            .putFloat(LONGITUDE, getLng.toFloat())
+            .putBoolean(HOOKED_SYSTEM, isSystemHooked)
+            .putBoolean(RANDOM_POSITION, isRandomPosition)
+            .putString(ACCURACY_SETTING, accuracy)
+            .apply()
     }
 
 

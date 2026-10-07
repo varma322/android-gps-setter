@@ -28,6 +28,7 @@ import io.github.jqssun.gpssetter.utils.ext.onIO
 import io.github.jqssun.gpssetter.utils.ext.onMain
 import io.github.jqssun.gpssetter.utils.ext.showToast
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -78,11 +79,13 @@ class MainViewModel @Inject constructor(
 
     }
 
-    val isXposed = MutableLiveData<Boolean>(true)
+    // active = LSPosed handed us its service binder (see App / PrefManager.onServiceBind)
+    val isXposed: LiveData<Boolean> = prefManger.moduleActive
     fun updateXposedState() {
         onMain {
-            // isXposed.value = YukiHookAPI.Status.isModuleActive
-            isXposed.value = false
+            // ponytail: the binder arrives asynchronously after process start; fixed grace period before calling the module missing
+            delay(2000)
+            if (prefManger.moduleActive.value != true) prefManger.moduleActive.value = false
         }
     }
 
