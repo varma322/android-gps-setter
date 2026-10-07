@@ -12,7 +12,6 @@ import io.github.jqssun.gpssetter.utils.ext.getAddress
 import io.github.jqssun.gpssetter.utils.ext.showToast
 import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
-import org.maplibre.android.WellKnownTileServer
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
 import org.maplibre.android.camera.CameraPosition
@@ -55,8 +54,7 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
         mMarker = null
     }
     override fun initializeMap() {
-        val key = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA).metaData.getString("com.maplibre.AccessToken")
-        MapLibre.getInstance(this, key, WellKnownTileServer.Mapbox)
+        MapLibre.getInstance(this)
         // val mapFragment = supportFragmentManager.findFragmentById(R.id.map) as SupportMapFragment?
         val mapFragment = SupportMapFragment.newInstance()
         supportFragmentManager.beginTransaction()
@@ -77,12 +75,7 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
                         .tilt(0f.toDouble())
                         .build()
                 ))
-                mMarker?.apply {
-                    position = latLng
-                    // TODO:
-                    // isVisible = true
-                    // showInfoWindow()
-                }
+                updateMarker(latLng)
             }
         }
     }
@@ -92,17 +85,8 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
 
 
             // maplibre custom ui
-            var typeUrl = "https://demotiles.maplibre.org/style.json"
-            if (viewModel.mapType.equals(2)) { // Satellite
-                typeUrl = "mapbox://styles/mapbox/satellite-streets-v12"
-            } else if (viewModel.mapType.equals(3)) { // Terrain
-                typeUrl = "mapbox://styles/mapbox/outdoors-v12"
-            } else if (viewModel.mapType.equals(4)) { // Hybrid
-                typeUrl = "mapbox://styles/mapbox/navigation-day-v1"
-            } else {
-                typeUrl = "mapbox://styles/mapbox/streets-v12"
-            }
-            setStyle(typeUrl) { style ->
+            // ponytail: keyless OpenFreeMap for every map type; satellite/terrain need a keyed provider (e.g. own Mapbox token)
+            setStyle("https://tiles.openfreemap.org/styles/liberty") { style ->
                 if (ActivityCompat.checkSelfPermission(this@MapActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) { 
                     val locationComponent = mMap.locationComponent
                     locationComponent.activateLocationComponent(
@@ -123,7 +107,8 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
             uiSettings.setCompassMargins(0,480,120,0)
             uiSettings.setLogoEnabled(true)
             uiSettings.setLogoMargins(0,0,0,80)
-            uiSettings.setAttributionEnabled(false)
+            uiSettings.setAttributionEnabled(true) // OSM data (ODbL) requires attribution
+            uiSettings.setAttributionMargins(uiSettings.attributionMarginLeft, 0, 0, 80)
             // uiSettings.setAttributionMargins(80,0,0,80)
             // setPadding(0,0,0,80)
 
@@ -151,15 +136,10 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
     }
     override fun onMapClick(latLng: LatLng): Boolean {
         mLatLng = latLng
-        mMarker?.let { marker ->
-            mLatLng.let {
-                // marker.isVisible = true
-                updateMarker(it!!)
-                mMap.animateCamera(CameraUpdateFactory.newLatLng(it))
-                lat = it.latitude
-                lon = it.longitude
-            }
-        }
+        updateMarker(latLng)
+        mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
+        lat = latLng.latitude
+        lon = latLng.longitude
         return true
     }
 

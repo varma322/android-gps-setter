@@ -23,12 +23,18 @@ class UpdateChecker @Inject constructor(private val apiResponse : GitHubService)
 
                 if (currentTag != null && (currentTag != "v" + BuildConfig.TAG_NAME && PrefManager.isUpdateDisabled)) {
                     //New update available!
-                    val asset =
-                        gitHubReleaseResponse.assets?.firstOrNull { it.name?.endsWith(".apk") == true }
-                    val releaseUrl =
-                        asset?.browserDownloadUrl?.replace("/download/", "/tag/")?.apply {
-                            substring(0, lastIndexOf("/"))
-                        }
+                    // this build's flavor only, otherwise full users can be "updated" to foss and vice versa
+                    val asset = gitHubReleaseResponse.assets?.firstOrNull {
+                        it.name?.startsWith("app-${BuildConfig.FLAVOR}-") == true && it.name?.endsWith(".apk") == true
+                    }
+                    val assetUrl = asset?.browserDownloadUrl ?: run {
+                        this@callbackFlow.trySend(null).isSuccess
+                        return@let
+                    }
+                    val assetName = asset?.name ?: run {
+                        this@callbackFlow.trySend(null).isSuccess
+                        return@let
+                    }
                     val name = gitHubReleaseResponse.name ?: run {
                         this@callbackFlow.trySend(null).isSuccess
                         return@let
@@ -42,15 +48,7 @@ class UpdateChecker @Inject constructor(private val apiResponse : GitHubService)
                         return@let
                     }
                     this@callbackFlow.trySend(
-                        Update(
-                            name,
-                            body,
-                            publishedAt,
-                            asset?.browserDownloadUrl
-                                ?: "https://github.com/jqssun/android-gps-setter/releases",
-                            asset?.name ?: "app-full-arm64-v8a-release.apk",
-                            releaseUrl ?: "https://github.com/jqssun/android-gps-setter/releases"
-                        )
+                        Update(name, body, publishedAt, assetUrl, assetName)
                     ).isSuccess
                 }
             } ?: run {
@@ -78,7 +76,7 @@ class UpdateChecker @Inject constructor(private val apiResponse : GitHubService)
     }
 
     @Parcelize
-    data class Update(val name: String, val changelog: String, val timestamp: String, val assetUrl: String, val assetName: String, val releaseUrl: String):
+    data class Update(val name: String, val changelog: String, val timestamp: String, val assetUrl: String, val assetName: String):
         Parcelable
 }
 

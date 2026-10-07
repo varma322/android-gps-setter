@@ -6,14 +6,18 @@ import io.github.jqssun.gpssetter.ui.CustomLatLng
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
+import java.io.IOException
 import java.util.*
 
 suspend fun CustomLatLng.getAddress(context: Context) = callbackFlow {
     withContext(Dispatchers.IO){
-        val addresses =
+        val addresses = try {
             Geocoder(context, Locale.getDefault()).getFromLocation(latitude, longitude, 1)
+        } catch (e: IOException) {
+            null // offline, or no geocoder backend (common on de-Googled devices)
+        }
         val sb = StringBuilder()
-        if (addresses!!.size > 0) {
+        if (!addresses.isNullOrEmpty()) {
             val address = addresses[0].getAddressLine(0)
             val strs = address.split(",".toRegex()).toTypedArray()
             if (strs.size > 1) {

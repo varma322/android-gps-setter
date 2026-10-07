@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.location.Address
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
@@ -236,7 +235,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
             setTitle(getString(R.string.add_fav_dialog_title))
             setPositiveButton(getString(R.string.dialog_button_add)) { _, _ ->
                 val s = editText.text.toString()
-                if (hasMarker()){
+                if (!hasMarker()){
                   showToast(getString(R.string.location_not_select))
                 }else{
                     viewModel.storeFavorite(s, lat, lon)
@@ -363,16 +362,12 @@ abstract class BaseMapActivity: AppCompatActivity() {
                 delay(3000)
                 trySend(SearchProgress.Complete(matcher.group().split(",")[0].toDouble(),matcher.group().split(",")[1].toDouble()))
             }else {
-                val geocoder = Geocoder(getActivityInstance())
-                val addressList: List<Address>? = geocoder.getFromLocationName(address,3)
-
                 try {
-                    addressList?.let {
-                        if (it.size == 1){
-                           trySend(SearchProgress.Complete(addressList[0].latitude, addressList[0].longitude))
-                        }else {
-                            trySend(SearchProgress.Fail(getString(R.string.address_not_found)))
-                        }
+                    val found = Geocoder(getActivityInstance()).getFromLocationName(address, 1)?.firstOrNull()
+                    if (found != null) {
+                        trySend(SearchProgress.Complete(found.latitude, found.longitude))
+                    } else {
+                        trySend(SearchProgress.Fail(getString(R.string.address_not_found)))
                     }
                 } catch (io : IOException){
                     trySend(SearchProgress.Fail(getString(R.string.no_internet)))

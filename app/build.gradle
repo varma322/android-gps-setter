@@ -37,11 +37,11 @@ android {
         release {
             def keystorePropertiesFile = rootProject.file("local.properties")
             def keystoreProperties = new Properties()
-            keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+            if (keystorePropertiesFile.exists()) keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 
             keyAlias keystoreProperties['keyAlias']
             keyPassword keystoreProperties['keyPassword']
-            storeFile file(keystoreProperties['storeFile'])
+            if (keystoreProperties['storeFile']) storeFile file(keystoreProperties['storeFile']) // unset → debug builds still work on a fresh clone
             storePassword keystoreProperties['storePassword']
         }
     }

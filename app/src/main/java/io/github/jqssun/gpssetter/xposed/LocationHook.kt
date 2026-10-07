@@ -30,15 +30,26 @@ object LocationHook {
     private const val earth = 6378137.0
     private val settings = Xshare()
     private var mLastUpdated: Long = 0
+    private var started = false
     private val ignorePkg = arrayListOf("com.android.location.fused", BuildConfig.APPLICATION_ID)
 
     private val context by lazy { AndroidAppHelper.currentApplication() as Context }
 
+    // re-reads prefs at most once per interval, so start/stop and new locations apply without a reboot
+    private fun isActive(interval: Int): Boolean {
+        if (System.currentTimeMillis() - mLastUpdated > interval) {
+            updateLocation()
+        }
+        return started
+    }
+
     private fun updateLocation() {
         try {
             mLastUpdated = System.currentTimeMillis()
-            val x = (rand.nextInt(50) - 15).toDouble()
-            val y = (rand.nextInt(50) - 15).toDouble()
+            started = settings.isStarted
+            if (!started) return
+            val x = (rand.nextInt(51) - 25).toDouble()
+            val y = (rand.nextInt(51) - 25).toDouble()
             val dlat = x / earth
             val dlng = y / (earth * cos(pi * settings.getLat / 180.0))
             newlat =
@@ -57,10 +68,8 @@ object LocationHook {
     fun initHooks(lpparam: XC_LoadPackage.LoadPackageParam) {
 
         if (lpparam.packageName == "android") { XposedBridge.log("Hooking system server")
-        if (settings.isStarted && (settings.isHookedSystem && !ignorePkg.contains(lpparam.packageName))) {
-            if (System.currentTimeMillis() - mLastUpdated > 200) {
-                updateLocation()
-            }
+        if (settings.isHookedSystem) {
+            val interval = 200
 
             if (Build.VERSION.SDK_INT < 34) {
 
@@ -74,6 +83,7 @@ object LocationHook {
                     LocationRequest::class.java, String::class.java,
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
+                            if (!isActive(interval)) return
                             val location = Location(LocationManager.GPS_PROVIDER)
                             location.time = System.currentTimeMillis() - 300
                             location.latitude = newlat
@@ -97,7 +107,7 @@ object LocationHook {
                                 method,
                                 object : XC_MethodHook() {
                                     override fun beforeHookedMethod(param: MethodHookParam) {
-                                        param.result = false
+                                        if (isActive(interval)) param.result = false
                                     }
                                 }
                             )
@@ -112,6 +122,7 @@ object LocationHook {
                     Location::class.java,
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
+                            if (!isActive(interval)) return
                             lateinit var location: Location
                             lateinit var originLocation: Location
                             if (param.args[0] == null) {
@@ -133,7 +144,6 @@ object LocationHook {
                             location.altitude = 0.0
                             location.speed = 0F
                             location.speedAccuracyMetersPerSecond = 0F
-                            XposedBridge.log("GS: lat: ${location.latitude}, lon: ${location.longitude}")
                             try {
                                 HiddenApiBypass.invoke(
                                     location.javaClass, location, "setIsFromMockProvider", false
@@ -158,6 +168,7 @@ object LocationHook {
                             method,
                             object : XC_MethodHook() {
                                 override fun beforeHookedMethod(param: MethodHookParam) {
+                                    if (!isActive(interval)) return
                                     val location = Location(LocationManager.GPS_PROVIDER)
                                     location.time = System.currentTimeMillis() - 300
                                     location.latitude = newlat
@@ -170,7 +181,7 @@ object LocationHook {
                                 }
                             }
                         )
-                    } else if (method.returnType == Void::class.java) {
+                    } else if (method.returnType == Void.TYPE) {
                         if (method.name == "startGnssBatch" ||
                             method.name == "addGnssAntennaInfoListener" ||
                             method.name == "addGnssMeasurementsListener" ||
@@ -180,7 +191,7 @@ object LocationHook {
                                 method,
                                 object : XC_MethodHook() {
                                     override fun beforeHookedMethod(param: MethodHookParam) {
-                                        param.result = null
+                                        if (isActive(interval)) param.result = null
                                     }
                                 }
                             )
@@ -193,6 +204,7 @@ object LocationHook {
                     Location::class.java,
                     object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
+                            if (!isActive(interval)) return
                             lateinit var location: Location
                             lateinit var originLocation: Location
                             if (param.args[0] == null) {
@@ -214,7 +226,6 @@ object LocationHook {
                             location.altitude = 0.0
                             location.speed = 0F
                             location.speedAccuracyMetersPerSecond = 0F
-                            XposedBridge.log("GS: lat: ${location.latitude}, lon: ${location.longitude}")
                             try {
                                 HiddenApiBypass.invoke(
                                     location.javaClass, location, "setIsFromMockProvider", false
@@ -242,10 +253,7 @@ object LocationHook {
                         method,
                         object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (System.currentTimeMillis() - mLastUpdated > interval) {
-                                    updateLocation()
-                                }
-                                if (settings.isStarted && !ignorePkg.contains(lpparam.packageName)) {
+                                if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
                                     param.result = newlat
                                 }
                             }
@@ -256,10 +264,7 @@ object LocationHook {
                         method,
                         object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (System.currentTimeMillis() - mLastUpdated > interval) {
-                                    updateLocation()
-                                }
-                                if (settings.isStarted && !ignorePkg.contains(lpparam.packageName)) {
+                                if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
                                     param.result = newlng
                                 }
                             }
@@ -270,10 +275,7 @@ object LocationHook {
                         method,
                         object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (System.currentTimeMillis() - mLastUpdated > interval) {
-                                    updateLocation()
-                                }
-                                if (settings.isStarted && !ignorePkg.contains(lpparam.packageName)) {
+                                if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
                                     param.result = accuracy
                                 }
                             }
@@ -289,10 +291,7 @@ object LocationHook {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
 
-                        if (System.currentTimeMillis() - mLastUpdated > interval) {
-                            updateLocation()
-                        }
-                        if (settings.isStarted && !ignorePkg.contains(lpparam.packageName)) {
+                        if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
                             lateinit var location: Location
                             lateinit var originLocation: Location
                             if (param.args[0] == null) {
@@ -314,7 +313,6 @@ object LocationHook {
                             location.altitude = 0.0
                             location.speed = 0F
                             location.speedAccuracyMetersPerSecond = 0F
-                            XposedBridge.log("GS: lat: ${location.latitude}, lon: ${location.longitude}")
                             try {
                                 HiddenApiBypass.invoke(
                                     location.javaClass, location, "setIsFromMockProvider", false
@@ -335,10 +333,7 @@ object LocationHook {
                 String::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (System.currentTimeMillis() - mLastUpdated > interval) {
-                            updateLocation()
-                        }
-                        if (settings.isStarted && !ignorePkg.contains(lpparam.packageName)) {
+                        if (!ignorePkg.contains(lpparam.packageName) && isActive(interval)) {
                             val provider = param.args[0] as String
                             val location = Location(provider)
                             location.time = System.currentTimeMillis() - 300
@@ -347,7 +342,6 @@ object LocationHook {
                             location.altitude = 0.0
                             location.speed = 0F
                             location.speedAccuracyMetersPerSecond = 0F
-                            XposedBridge.log("GS: lat: ${location.latitude}, lon: ${location.longitude}")
                             try {
                                 HiddenApiBypass.invoke(
                                     location.javaClass, location, "setIsFromMockProvider", false

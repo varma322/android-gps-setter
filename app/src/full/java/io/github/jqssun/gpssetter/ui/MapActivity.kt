@@ -30,10 +30,7 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, GoogleMap.OnMapClickLi
     private var mMarker: Marker? = null
 
     override fun hasMarker(): Boolean {
-        if (!mMarker?.isVisible!!) {
-            return true
-        }
-        return false
+        return mMarker?.isVisible == true
     }
     private fun updateMarker(it: LatLng) {
         mMarker?.position = it!!
