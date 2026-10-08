@@ -12,8 +12,8 @@ This is a fork of [jqssun/android-gps-setter](https://github.com/jqssun/android-
 ## What's different in this fork
 
 - **Modern Xposed API (libxposed 101).** No "deprecated feature" warning in LSPosed 2.x. Settings reach the hook through LSPosed's remote preferences instead of a world-readable file, so the module keeps working after LSPosed 2.3.0 removes that file-based sharing.
-- **System-wide spoofing on Android 12+.** Every location fix (GPS, network, fused, passive) is rewritten inside the system server, so apps don't have to be scoped one by one.
-- **Real location during emergencies.** While an emergency call or SMS is active (Android 14+), real fixes pass through untouched.
+- **System-wide spoofing with continuous fix generation (Android 12+).** The module actively generates and dispatches spoofed fixes at 1 Hz inside the system server across GPS, fused, and network providers. Google Location Accuracy can stay enabled, and Play-services apps follow the spoofed location without scoping even indoors.
+- **Real location during emergencies.** While an emergency call or SMS is active (Android 14+), real fixes pass through untouched and fake fix generation is suspended.
 - **System hooks fixed for Android 11–13.** The location service moved packages in Android 11, so the system hook never ran there.
 - **Start, stop and location changes apply immediately**, without a reboot.
 - **Working maps in the FOSS build.** It uses keyless [OpenFreeMap](https://openfreemap.org) tiles, because the previously bundled Mapbox token was revoked.
@@ -46,15 +46,12 @@ This fork installs as `io.github.varma322.gpssetter`, alongside upstream (`io.gi
 
 ## How it works
 
-- **System Framework.** Rewrites fixes in `LocationProviderManager.onReportLocation` (Android 12+), `LocationManagerService.getLastLocation` and `injectLocation`. While spoofing, it also refuses raw GNSS measurement, navigation and batching listeners.
+- **System Framework.** Actively generates 1 Hz spoofed fixes to location providers (`gps`, `fused`, `network`) and rewrites incoming fixes in `LocationProviderManager.onReportLocation` (Android 12+), `LocationManagerService.getLastLocation` and `injectLocation`. While spoofing, it also refuses raw GNSS measurement, navigation and batching listeners.
 - **Scoped apps.** Inside the app's own process, hooks `Location.getLatitude` / `getLongitude` / `getAccuracy` / `set` and `LocationManager.getLastKnownLocation`. This catches every location the app reads, wherever it came from.
 
 ## Tips and limitations
 
-- **Apps using Google Play services location** can work out your position from Wi-Fi and cell towers inside Play services, which the system hook can't see. Either:
-  - turn off *Settings → Location → Location services → Google Location Accuracy*, plus Wi-Fi and Bluetooth scanning, or
-  - add the app to the module's scope.
-- **No GPS signal (e.g. indoors) with network location off** means there are no fixes to rewrite, so Play-services apps may show a cached location. Scope those apps.
+- **Google Location Accuracy can stay on.** Because the module generates continuous 1 Hz GPS fixes inside the system framework, Google Play services' Fused Location Provider (FLP) prioritizes the high-accuracy GPS fixes over Wi-Fi/cell estimates. Play-services apps follow the spoofed location indoors and outdoors without needing individual app scoping.
 - **Apps protected by Google Play's anti-tamper** (look for `libpairipcore.so` in the APK) crash when scoped. Don't scope them; rely on the system hook.
 - **Only enable one location-spoofing module.** If two hook the same calls, whichever runs last wins.
 - **Spoofing is system-wide while it's on.** That includes other system services; only emergencies are exempt (Android 14+).
