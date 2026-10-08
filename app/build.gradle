@@ -41,7 +41,7 @@ android {
 
             keyAlias keystoreProperties['keyAlias']
             keyPassword keystoreProperties['keyPassword']
-            if (keystoreProperties['storeFile']) storeFile file(keystoreProperties['storeFile']) // unset → debug builds still work on a fresh clone
+            if (keystoreProperties['storeFile']) storeFile rootProject.file(keystoreProperties['storeFile']) // repo-root relative, matching where CI writes upload.jks; unset → debug builds still work on a fresh clone
             storePassword keystoreProperties['storePassword']
         }
     }
