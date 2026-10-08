@@ -14,18 +14,12 @@ class Xshare(private val prefs: SharedPreferences) {
         false
     )
 
+    // Double bits written by PrefManager; only ever Long under these keys, so never a cross-type read
     val getLat: Double
-    get() = prefs.getFloat(
-        "latitude",
-        45.0000000.toFloat()
-    ).toDouble()
-
+    get() = Double.fromBits(prefs.getLong("latitude_d", (45.0).toRawBits()))
 
     val getLng : Double
-    get() = prefs.getFloat(
-        "longitude",
-        0.0000000.toFloat()
-    ).toDouble()
+    get() = Double.fromBits(prefs.getLong("longitude_d", (0.0).toRawBits()))
 
     val isHookedSystem : Boolean
     get() = prefs.getBoolean(

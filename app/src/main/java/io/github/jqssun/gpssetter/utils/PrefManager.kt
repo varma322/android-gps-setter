@@ -18,8 +18,12 @@ import timber.log.Timber
 object PrefManager   {
 
     private const val START = "start"
-    private const val LATITUDE = "latitude"
+    private const val LATITUDE = "latitude"          // legacy Float; read only to migrate old installs
     private const val LONGITUDE = "longitude"
+    private const val LATITUDE_D = "latitude_d"       // Double bits (Long); Float lost ~1 m of precision
+    private const val LONGITUDE_D = "longitude_d"
+    private const val DEF_LAT = 40.7128
+    private const val DEF_LNG = -74.0060
     private const val HOOKED_SYSTEM = "system_hooked"
     private const val RANDOM_POSITION = "random_position"
     private const val ACCURACY_SETTING = "accuracy_level"
@@ -60,8 +64,8 @@ object PrefManager   {
         val remote = remote ?: return
         remote.edit()
             .putBoolean(START, isStarted)
-            .putFloat(LATITUDE, getLat.toFloat())
-            .putFloat(LONGITUDE, getLng.toFloat())
+            .putLong(LATITUDE_D, getLat.toRawBits())
+            .putLong(LONGITUDE_D, getLng.toRawBits())
             .putBoolean(HOOKED_SYSTEM, isSystemHooked)
             .putBoolean(RANDOM_POSITION, isRandomPosition)
             .putString(ACCURACY_SETTING, accuracy)
@@ -73,10 +77,17 @@ object PrefManager   {
         get() = pref.getBoolean(START, false)
 
     val getLat : Double
-        get() = pref.getFloat(LATITUDE, 40.7128F).toDouble()
+        get() = readCoord(LATITUDE_D, LATITUDE, DEF_LAT)
 
     val getLng : Double
-        get() = pref.getFloat(LONGITUDE, -74.0060F).toDouble()
+        get() = readCoord(LONGITUDE_D, LONGITUDE, DEF_LNG)
+
+    // prefer the Double-bits value; fall back to the legacy Float once, so an upgrade keeps the saved point
+    private fun readCoord(bitsKey: String, legacyKey: String, def: Double): Double = when {
+        pref.contains(bitsKey) -> Double.fromBits(pref.getLong(bitsKey, 0))
+        pref.contains(legacyKey) -> pref.getFloat(legacyKey, def.toFloat()).toDouble()
+        else -> def
+    }
 
     var isSystemHooked : Boolean
         get() = pref.getBoolean(HOOKED_SYSTEM, true) // must match Xshare.isHookedSystem default
@@ -109,8 +120,8 @@ object PrefManager   {
     fun update(start:Boolean, la: Double, ln: Double) {
         runInBackground {
             val prefEditor = pref.edit()
-            prefEditor.putFloat(LATITUDE, la.toFloat())
-            prefEditor.putFloat(LONGITUDE, ln.toFloat())
+            prefEditor.putLong(LATITUDE_D, la.toRawBits())
+            prefEditor.putLong(LONGITUDE_D, ln.toRawBits())
             prefEditor.putBoolean(START, start)
             prefEditor.apply()
         }
