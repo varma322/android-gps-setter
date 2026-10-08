@@ -14,17 +14,14 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.cos
 
 object LocationHook {
 
     private const val TAG = "GPS Setter"
     @Volatile var newlat: Double = 45.0000
     @Volatile var newlng: Double = 0.0000
-    private const val pi = 3.14159265359
     @Volatile private var accuracy: Float = 10.0f
     private val rand: Random = Random()
-    private const val earth = 6378137.0
     private lateinit var module: XposedModule
     private lateinit var settings: Xshare
     @Volatile private var mLastUpdated: Long = 0
@@ -58,14 +55,12 @@ object LocationHook {
             if (now != started) module.log(Log.INFO, TAG, "Spoofing ${if (now) "on" else "off"}")
             started = now
             if (!started) return
-            val x = (rand.nextInt(51) - 25).toDouble()
-            val y = (rand.nextInt(51) - 25).toDouble()
-            val dlat = x / earth
-            val dlng = y / (earth * cos(pi * settings.getLat / 180.0))
+            val north = (rand.nextInt(51) - 25).toDouble()
+            val east = (rand.nextInt(51) - 25).toDouble()
             newlat =
-                if (settings.isRandomPosition) settings.getLat + (dlat * 180.0 / pi) else settings.getLat
+                if (settings.isRandomPosition) settings.getLat + GeoOffset.latOffsetDegrees(north) else settings.getLat
             newlng =
-                if (settings.isRandomPosition) settings.getLng + (dlng * 180.0 / pi) else settings.getLng
+                if (settings.isRandomPosition) settings.getLng + GeoOffset.lngOffsetDegrees(east, settings.getLat) else settings.getLng
             accuracy = settings.accuracy?.toFloatOrNull()?.takeIf { it > 0f } ?: 10.0f
 
         } catch (e: Exception) {

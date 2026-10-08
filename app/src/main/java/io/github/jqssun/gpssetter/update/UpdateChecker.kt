@@ -25,7 +25,7 @@ class UpdateChecker @Inject constructor(private val apiResponse : GitHubService)
                     //New update available!
                     // this build's flavor only, otherwise full users can be "updated" to foss and vice versa
                     val asset = gitHubReleaseResponse.assets?.firstOrNull {
-                        it.name?.startsWith("app-${BuildConfig.FLAVOR}-") == true && it.name?.endsWith(".apk") == true
+                        updateAssetMatches(it.name, BuildConfig.FLAVOR)
                     }
                     val assetUrl = asset?.browserDownloadUrl ?: run {
                         this@callbackFlow.trySend(null).isSuccess
