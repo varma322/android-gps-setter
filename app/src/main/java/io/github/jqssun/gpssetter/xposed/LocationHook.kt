@@ -10,23 +10,32 @@ import io.github.jqssun.gpssetter.BuildConfig
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModule
 import org.lsposed.hiddenapibypass.HiddenApiBypass
+import java.lang.reflect.Field
+import java.lang.reflect.Method
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.cos
 
 object LocationHook {
 
     private const val TAG = "GPS Setter"
-    var newlat: Double = 45.0000
-    var newlng: Double = 0.0000
+    @Volatile var newlat: Double = 45.0000
+    @Volatile var newlng: Double = 0.0000
     private const val pi = 3.14159265359
-    private var accuracy: Float = 0.0f
+    @Volatile private var accuracy: Float = 10.0f
     private val rand: Random = Random()
     private const val earth = 6378137.0
     private lateinit var module: XposedModule
     private lateinit var settings: Xshare
-    private var mLastUpdated: Long = 0
-    private var started = false
+    @Volatile private var mLastUpdated: Long = 0
+    @Volatile private var started = false
     private val ignorePkg = arrayListOf("com.android.location.fused", BuildConfig.APPLICATION_ID)
+
+    // Cached provider managers (e.g. "gps", "fused", "network") for generating fake fixes in system_server
+    private val providerManagers = ConcurrentHashMap<String, Any>()
+    @Volatile private var generatorStarted = false
+    @Volatile private var lastGpsReportTime: Long = 0
+    private var locationResultWrap: Method? = null
 
     private fun init(xposed: XposedModule) {
         module = xposed
@@ -41,6 +50,7 @@ object LocationHook {
         return started
     }
 
+    @Synchronized
     private fun updateLocation() {
         try {
             mLastUpdated = System.currentTimeMillis()
@@ -56,7 +66,7 @@ object LocationHook {
                 if (settings.isRandomPosition) settings.getLat + (dlat * 180.0 / pi) else settings.getLat
             newlng =
                 if (settings.isRandomPosition) settings.getLng + (dlng * 180.0 / pi) else settings.getLng
-            accuracy = settings.accuracy!!.toFloat()
+            accuracy = settings.accuracy?.toFloatOrNull()?.takeIf { it > 0f } ?: 10.0f
 
         } catch (e: Exception) {
             module.log(Log.ERROR, TAG, "Failed to read settings", e)
@@ -73,12 +83,14 @@ object LocationHook {
             location.elapsedRealtimeNanos = origin.elapsedRealtimeNanos
             location.verticalAccuracyMeters = origin.verticalAccuracyMeters
         } else {
+            val nowNanos = SystemClock.elapsedRealtimeNanos()
             location.time = System.currentTimeMillis() - 300
-            location.elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+            location.elapsedRealtimeNanos = nowNanos - 300_000_000L
         }
-        location.latitude = newlat
-        location.longitude = newlng
-        location.accuracy = accuracy
+        location.latitude = if (newlat == 0.0 && newlng == 0.0) 0.000001 else newlat
+        location.longitude = if (newlat == 0.0 && newlng == 0.0) 0.000001 else newlng
+        // LocationResult.validate() rejects accuracy <=0 or > 1,000,000 m; keep it sane
+        location.accuracy = accuracy.coerceIn(1.0f, 10000.0f)
         location.altitude = 0.0
         location.speed = 0F
         location.speedAccuracyMetersPerSecond = 0F
@@ -88,6 +100,142 @@ object LocationHook {
             module.log(Log.WARN, TAG, "unable to set mock $e")
         }
         return location
+    }
+
+    private fun wrapLocationResult(locationResultClass: Class<*>, location: Location): Any? {
+        if (locationResultWrap == null) {
+            locationResultWrap = try {
+                locationResultClass.getMethod("wrap", List::class.java)
+            } catch (e: NoSuchMethodException) {
+                try {
+                    locationResultClass.getMethod("create", List::class.java)
+                } catch (e2: NoSuchMethodException) {
+                    locationResultClass.getMethod("wrap", Array<Location>::class.java)
+                }
+            }
+        }
+        val wrap = locationResultWrap ?: return null
+        return if (wrap.parameterTypes[0] == List::class.java) {
+            wrap.invoke(null, listOf(location))
+        } else {
+            wrap.invoke(null, arrayOf(location))
+        }
+    }
+
+    private fun registerProviderManager(manager: Any, lpmClass: Class<*>) {
+        if (!lpmClass.isInstance(manager)) return
+        try {
+            val getName = lpmClass.getMethod("getName")
+            val name = getName.invoke(manager) as? String ?: return
+            if (providerManagers.putIfAbsent(name, manager) == null) {
+                module.log(Log.INFO, TAG, "Discovered location provider: $name")
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun scanLms(instance: Any, lmsClass: Class<*>, lpmClass: Class<*>) {
+        try {
+            try {
+                val getLpm = lmsClass.getDeclaredMethod("getLocationProviderManager", String::class.java).apply {
+                    isAccessible = true
+                }
+                for (name in listOf(LocationManager.GPS_PROVIDER, LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
+                    val mgr = getLpm.invoke(instance, name)
+                    if (mgr != null) registerProviderManager(mgr, lpmClass)
+                }
+            } catch (_: Throwable) {}
+
+            for (field in lmsClass.declaredFields) {
+                if (Iterable::class.java.isAssignableFrom(field.type)) {
+                    field.isAccessible = true
+                    val list = field.get(instance) as? Iterable<*> ?: continue
+                    for (item in list) {
+                        if (item != null && lpmClass.isInstance(item)) {
+                            registerProviderManager(item, lpmClass)
+                        }
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            module.log(Log.WARN, TAG, "Failed scanning LMS fields", t)
+        }
+    }
+
+    private fun tryResolveProviders(classLoader: ClassLoader, lmsClass: Class<*>, lpmClass: Class<*>) {
+        try {
+            val smClass = classLoader.loadClass("android.os.ServiceManager")
+            val getService = smClass.getMethod("getService", String::class.java)
+            val binder = getService.invoke(null, "location") ?: return
+            if (lmsClass.isInstance(binder)) {
+                scanLms(binder, lmsClass, lpmClass)
+            }
+        } catch (_: Throwable) {}
+    }
+
+    // Actively feeds spoofed fixes to providers at 1 Hz so Google Play services and listeners have fresh GPS fixes
+    private fun startFixGenerator(classLoader: ClassLoader, lmsClass: Class<*>, lpmClass: Class<*>, emergencyField: Field?) {
+        if (generatorStarted) return
+        generatorStarted = true
+
+        val resultClass = Class.forName("android.location.LocationResult")
+        val onReportLocation = lpmClass.getDeclaredMethod("onReportLocation", resultClass).apply {
+            isAccessible = true
+        }
+
+        Thread({
+            module.log(Log.INFO, TAG, "Started fake fix generator loop")
+            while (true) {
+                try {
+                    Thread.sleep(250)
+                    if (!isActive(200)) continue
+
+                    val now = SystemClock.elapsedRealtime()
+                    // If a fix was reported in the last 900ms (e.g. from real GPS), avoid duplicate bursts
+                    if (now - lastGpsReportTime < 900) continue
+
+                    // Never generate fake fixes during an active emergency call/SMS
+                    val inEmerg = providerManagers.values.any { inEmergency(emergencyField?.get(it)) }
+                    if (inEmerg) continue
+
+                    if (!providerManagers.containsKey(LocationManager.GPS_PROVIDER)) {
+                        tryResolveProviders(classLoader, lmsClass, lpmClass)
+                    }
+
+                    val targets = listOf(
+                        LocationManager.GPS_PROVIDER,
+                        LocationManager.FUSED_PROVIDER,
+                        LocationManager.NETWORK_PROVIDER
+                    )
+
+                    var deliveredGps = false
+                    for (name in targets) {
+                        val manager = providerManagers[name] ?: continue
+                        try {
+                            val fakeLoc = fakeLocation(provider = name)
+                            val res = wrapLocationResult(resultClass, fakeLoc) ?: continue
+                            // ponytail: calls @GuardedBy("mMultiplexerLock") off-thread without the lock;
+                            // fine at 1 Hz, could race real traffic on the multiplexer. Acquire that
+                            // private lock reflectively if contention ever shows up.
+                            onReportLocation.invoke(manager, res)
+                            if (name == LocationManager.GPS_PROVIDER) deliveredGps = true
+                        } catch (t: Throwable) {
+                            module.log(Log.WARN, TAG, "Failed to deliver fake fix to $name", t)
+                        }
+                    }
+
+                    if (deliveredGps) {
+                        lastGpsReportTime = now
+                    }
+                } catch (e: InterruptedException) {
+                    break
+                } catch (t: Throwable) {
+                    module.log(Log.WARN, TAG, "Fix generator tick error", t)
+                }
+            }
+        }, "GpsSetter-FixGenerator").apply {
+            isDaemon = true
+            start()
+        }
     }
 
     // for methods taking a single Location: hand the original our fake instead
@@ -162,26 +310,58 @@ object LocationHook {
 
             // Android 12+: every provider's fix (gps, network, fused, passive) passes through here on
             // its way to the last-location cache and to every app listening for updates
-            if (Build.VERSION.SDK_INT >= 31) safely("onReportLocation") {
+            if (Build.VERSION.SDK_INT >= 31) {
                 val lpm = classLoader.loadClass("com.android.server.location.provider.LocationProviderManager")
                 val result = Class.forName("android.location.LocationResult") // @SystemApi, not in the public SDK
                 val size = result.getMethod("size")
                 val get = result.getMethod("get", Int::class.java)
+                val getName = lpm.getMethod("getName")
                 // Android 14+ only; on 12/13 there is no emergency state here to check
                 val emergency = try { lpm.getDeclaredField("mEmergencyHelper").apply { isAccessible = true } } catch (e: NoSuchFieldException) { null }
-                module.hook(lpm.getDeclaredMethod("onReportLocation", result)).intercept { chain ->
-                    if (isActive(interval) && !inEmergency(emergency?.get(chain.thisObject))) {
-                        val locations = chain.getArg(0)
-                        for (i in 0 until size.invoke(locations) as Int) {
-                            val location = get.invoke(locations, i) as Location
-                            location.set(fakeLocation(location))
+
+                safely("onReportLocation") {
+                    module.hook(lpm.getDeclaredMethod("onReportLocation", result)).intercept { chain ->
+                        val manager = chain.thisObject
+                        registerProviderManager(manager, lpm)
+                        val name = try { getName.invoke(manager) as? String } catch (_: Throwable) { null }
+                        if (name == LocationManager.GPS_PROVIDER) {
+                            lastGpsReportTime = SystemClock.elapsedRealtime()
+                        }
+                        if (isActive(interval) && !inEmergency(emergency?.get(manager))) {
+                            val locations = chain.getArg(0)
+                            for (i in 0 until size.invoke(locations) as Int) {
+                                val location = get.invoke(locations, i) as Location
+                                location.set(fakeLocation(location))
+                            }
+                        }
+                        chain.proceed()
+                    }
+                }
+
+                for (method in lms.declaredMethods) {
+                    if (method.name == "addLocationProviderManager" && method.parameterTypes.isNotEmpty()) {
+                        safely("addLocationProviderManager") {
+                            module.hook(method).intercept { chain ->
+                                val mgr = chain.getArg(0)
+                                if (mgr != null) registerProviderManager(mgr, lpm)
+                                chain.proceed()
+                            }
+                        }
+                    } else if (method.name in listOf("onSystemReady", "onSystemThirdPartyAppsCanStart")) {
+                        safely(method.name) {
+                            module.hook(method).intercept { chain ->
+                                scanLms(chain.thisObject, lms, lpm)
+                                chain.proceed()
+                            }
                         }
                     }
-                    chain.proceed()
                 }
+
+                startFixGenerator(classLoader, lms, lpm, emergency)
             }
         }
     }
+
 
     // never hand emergency services a fake fix: during an emergency call/SMS real locations go through untouched
     private fun inEmergency(helper: Any?): Boolean = helper != null && try {
