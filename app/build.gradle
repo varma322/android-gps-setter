@@ -12,7 +12,7 @@ def tagName = '0.0.6'
 android {
     compileSdk 36 // libxposed 101 requires it; targetSdk is what changes runtime behaviour
     defaultConfig {
-        applicationId "io.github.jqssun.gpssetter"
+        applicationId "io.github.varma322.gpssetter"
         minSdk 27
         targetSdk 34
         versionCode 6

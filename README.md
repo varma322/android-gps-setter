@@ -1,91 +1,86 @@
 # GPS Setter
 
-[![Stars](https://img.shields.io/github/stars/jqssun/android-gps-setter)](https://github.com/jqssun/android-gps-setter/stargazers)
-[![LSPosed](https://img.shields.io/github/downloads/Xposed-Modules-Repo/io.github.jqssun.gpssetter/total?label=LSPosed&logo=Android&style=flat&labelColor=F48FB1&logoColor=ffffff)](https://github.com/Xposed-Modules-Repo/io.github.jqssun.gpssetter/releases)
-[![GitHub](https://img.shields.io/github/downloads/jqssun/android-gps-setter/total?label=GitHub&logo=GitHub)](https://github.com/jqssun/android-gps-setter/releases)
-[![release](https://img.shields.io/github/v/release/jqssun/android-gps-setter)](https://github.com/jqssun/android-gps-setter/releases)
-[![build](https://img.shields.io/github/actions/workflow/status/jqssun/android-gps-setter/apk.yml)](https://github.com/jqssun/android-gps-setter/actions/workflows/apk.yml)
-[![license](https://img.shields.io/github/license/jqssun/android-gps-setter)](https://github.com/jqssun/android-gps-setter/blob/master/LICENSE)
-[![issues](https://img.shields.io/github/issues/jqssun/android-gps-setter)](https://github.com/jqssun/android-gps-setter/issues)
-  
-A GPS setter based on the Xposed framework. This fork is the first module to achieve support for Android 15+ with its sources available.  
+[![release](https://img.shields.io/github/v/release/varma322/android-gps-setter)](https://github.com/varma322/android-gps-setter/releases)
+[![build](https://img.shields.io/github/actions/workflow/status/varma322/android-gps-setter/apk.yml)](https://github.com/varma322/android-gps-setter/actions/workflows/apk.yml)
+[![license](https://img.shields.io/github/license/varma322/android-gps-setter)](https://github.com/varma322/android-gps-setter/blob/main/LICENSE)
+[![issues](https://img.shields.io/github/issues/varma322/android-gps-setter)](https://github.com/varma322/android-gps-setter/issues)
 
-## Releases
+An Xposed module that sets your device's location, built on the modern [libxposed](https://github.com/libxposed/api) API for LSPosed 2.x / Vector.
 
-<table>
-    <tr>
-        <th>Version</th>
-        <th>app-full-*.apk</th>
-        <th>app-foss-*.apk</th>
-    </tr>
-    <tr>
-        <th>Maps Library</th>
-        <td>GMS (com.google.android.gms:play-services-maps)</td>
-        <td>MapLibre (org.maplibre.gl:android-sdk)</td>
-    </tr>
-    <tr>
-        <th>Fused Location</th>
-        <td>GMS (com.google.android.gms:play-services-location)</td>
-        <td>microG (org.microg.gms:play-services-location)</td>
-    </tr>
-    <tr>
-        <th>Distribution</th>
-        <td>
-            <a href="https://github.com/jqssun/android-gps-setter/releases">
-                <img
-                    src="https://raw.githubusercontent.com/NeoApplications/Neo-Backup/refs/heads/main/badge_github.png"
-                    alt="Get it on GitHub" width="200" />
-            </a>
-        </td>
-        <td>
-            <a href="https://f-droid.org/packages/io.github.jqssun.gpssetter">
-                <img
-                    src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-                    alt="Get it on F-Droid" width="200" />
-            </a>
-        </td>
-    </tr>
-</table>
+This is a fork of [jqssun/android-gps-setter](https://github.com/jqssun/android-gps-setter), which builds on [Android1500/GpsSetter](https://github.com/Android1500/GpsSetter).
 
-<!-- 
-[<img src="https://raw.githubusercontent.com/NeoApplications/Neo-Backup/refs/heads/main/badge_github.png" alt="Get it on GitHub" height="80">](https://github.com/jqssun/android-gps-setter/releases)
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">]()
-[<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png" height="80">]()
--->
+## What's different in this fork
 
-## Motivation
+- **Modern Xposed API (libxposed 101).** No "deprecated feature" warning in LSPosed 2.x. Settings reach the hook through LSPosed's remote preferences instead of a world-readable file, so the module keeps working after LSPosed 2.3.0 removes that file-based sharing.
+- **System-wide spoofing on Android 12+.** Every location fix (GPS, network, fused, passive) is rewritten inside the system server, so apps don't have to be scoped one by one.
+- **Real location during emergencies.** While an emergency call or SMS is active (Android 14+), real fixes pass through untouched.
+- **System hooks fixed for Android 11–13.** The location service moved packages in Android 11, so the system hook never ran there.
+- **Start, stop and location changes apply immediately**, without a reboot.
+- **Working maps in the FOSS build.** It uses keyless [OpenFreeMap](https://openfreemap.org) tiles, because the previously bundled Mapbox token was revoked.
+- **Fixes:** saving favorites and map taps in the FOSS build, crashes when offline or without a geocoder, and the update checker picking the other build's APK. Debug builds no longer need a keystore.
 
-An increasing number of apps are abusing the location permission for tracking purposes, preventing the user from using the app without granting the permission. Traditionally on Android, modifying the response from android server is done using the mock location provider - however, the availability of this feature is device dependent. Additionally, some apps have started explicitly checking for signals regarding whether the location provided is reliable. This module aims to mitigate this by providing an ability to either,
-1. hook the app itself to modify the location it receives, or
-2. hook the system server if the app explicitly checks for whether itself is being hooked
+## Downloads
 
-Specifically, in the case of hooking just the app, it intercepts [`android.location.Location`](https://developer.android.com/reference/android/location/Location) and [`android.location.LocationManager`](https://developer.android.com/reference/android/location/LocationManager) methods including
-- [`getLatitude()`](https://developer.android.com/reference/android/location/Location#getLatitude())
-- [`getLongitude()`](https://developer.android.com/reference/android/location/Location#getLongitude())
-- [`getAccuracy()`](https://developer.android.com/reference/android/location/Location#getAccuracy())
-- [`getLastKnownLocation(java.lang.String)`](https://developer.android.com/reference/android/location/LocationManager#getLastKnownLocation(java.lang.String))
+Grab an APK from [Releases](https://github.com/varma322/android-gps-setter/releases). There are two builds:
 
-## Compatibility
+|                | `app-full-*.apk`                     | `app-foss-*.apk`                        |
+|----------------|--------------------------------------|-----------------------------------------|
+| Maps           | Google Maps (`play-services-maps`)   | MapLibre + OpenFreeMap                  |
+| Fused location | Google Play services                 | microG client (`org.microg.gms`)        |
 
-- Android 8.1+ (tested up to Android 16 Beta 2)
-- Rooted devices with Xposed framework installed (e.g. LSPosed)
-- Unrooted devices with LSPatch (with manually embedded specified location)
+This fork installs as `io.github.varma322.gpssetter`, alongside upstream (`io.github.jqssun.gpssetter`) rather than over it, and its builds are signed with a different key. It is not on F-Droid.
 
-## Features
+## Requirements
 
-- ✨ (New) Supports system server location APIs introduced in Android 14+
-- 🍀 (New) Supports a fully FLOSS build flavor - including all underlying dependencies
-- 🖲️ (New) Allows adjusting location on the fly via an on-screen joystick overlay
-- 🎉 (New) Features custom designed resource bundles with updated dependent libraries
-- 🎲 Allows using a live updating random location in the vicinity of the set point
-- 🔥 Compatible with latest Material Design
+- A rooted device with **LSPosed 2.x or Vector** (libxposed API 101+).
+  - LSPosed 1.x can't load libxposed 101 modules; use upstream v0.0.6 there.
+  - LSPatch (unrooted) isn't supported, because embedded frameworks don't provide remote preferences.
+- **Android 8.1+.** System-wide spoofing of live location updates needs Android 12+. Tested on Android 16.
 
-## Demo
+## Setup
 
-<video loop src='https://github.com/user-attachments/assets/fbc0901c-b126-4ca7-9239-34390a76e7f9' alt="demo" width="200" style="display: block; margin: auto;"></video> <!-- https://github.com/jqssun/android-gps-setter/releases/download/v0.0.1/0.mp4 -->
+1. Install the APK and enable **GPS Setter** in LSPosed.
+2. In its scope, tick **System Framework** for system-wide spoofing. Optionally also tick individual apps (see [Tips](#tips-and-limitations)).
+3. Reboot. System Framework hooks load at boot; per-app hooks only need that app restarted.
+4. Open GPS Setter, pick a location on the map and press ▶.
+
+## How it works
+
+- **System Framework.** Rewrites fixes in `LocationProviderManager.onReportLocation` (Android 12+), `LocationManagerService.getLastLocation` and `injectLocation`. While spoofing, it also refuses raw GNSS measurement, navigation and batching listeners.
+- **Scoped apps.** Inside the app's own process, hooks `Location.getLatitude` / `getLongitude` / `getAccuracy` / `set` and `LocationManager.getLastKnownLocation`. This catches every location the app reads, wherever it came from.
+
+## Tips and limitations
+
+- **Apps using Google Play services location** can work out your position from Wi-Fi and cell towers inside Play services, which the system hook can't see. Either:
+  - turn off *Settings → Location → Location services → Google Location Accuracy*, plus Wi-Fi and Bluetooth scanning, or
+  - add the app to the module's scope.
+- **No GPS signal (e.g. indoors) with network location off** means there are no fixes to rewrite, so Play-services apps may show a cached location. Scope those apps.
+- **Apps protected by Google Play's anti-tamper** (look for `libpairipcore.so` in the APK) crash when scoped. Don't scope them; rely on the system hook.
+- **Only enable one location-spoofing module.** If two hook the same calls, whichever runs last wins.
+- **Spoofing is system-wide while it's on.** That includes other system services; only emergencies are exempt (Android 14+).
+
+## Building
+
+- Debug builds need JDK 17–21 and Android SDK platform 36, but no keystore:
+
+  ```sh
+  ./gradlew assembleFossDebug   # or assembleFullDebug
+  ```
+
+- Release builds read `keyAlias`, `keyPassword`, `storeFile` and `storePassword` from `local.properties`.
+- CI ([`apk.yml`](.github/workflows/apk.yml)) builds both flavors on `v*.*.*` tags and publishes a GitHub release. It needs these repository secrets:
+  - `STORE`: base64 of the keystore
+  - `LOCAL`: base64 of a `local.properties` containing the signing keys
+- `./release.sh v1.2.3` bumps the version, then tags and pushes. It uses `gsed` (GNU sed).
 
 ## Credits
 
-- [Android1500](https://github.com/Android1500/GpsSetter) for the original GpsSetter targeting Android 8.1 to 13
-- [MapLibre](https://github.com/maplibre/maplibre-native) for the mapping library
+- [jqssun/android-gps-setter](https://github.com/jqssun/android-gps-setter), the project this fork is based on
+- [Android1500/GpsSetter](https://github.com/Android1500/GpsSetter), the original GpsSetter for Android 8.1–13
+- [libxposed](https://github.com/libxposed) and [LSPosed](https://github.com/LSPosed/LSPosed) / [Vector](https://github.com/JingMatrix/Vector)
+- [MapLibre](https://github.com/maplibre/maplibre-native) for the mapping library; [OpenFreeMap](https://openfreemap.org) for tiles; map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors
 - [microG](https://github.com/microg/GmsCore) for the FOSS implementation of Google Mobile Services
+
+## License
+
+[GPL-3.0](LICENSE)
