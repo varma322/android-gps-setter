@@ -21,7 +21,8 @@ class UpdateChecker @Inject constructor(private val apiResponse : GitHubService)
             getReleaseList()?.let { gitHubReleaseResponse ->
                 val currentTag = gitHubReleaseResponse.tagName
 
-                if (currentTag != null && (currentTag != "v" + BuildConfig.TAG_NAME && PrefManager.isUpdateDisabled)) {
+                // isUpdateDisabled is the "Check for updates" switch (true = check); only offer strictly newer releases
+                if (PrefManager.isUpdateDisabled && isNewerVersion(currentTag, "v" + BuildConfig.TAG_NAME)) {
                     //New update available!
                     // this build's flavor only, otherwise full users can be "updated" to foss and vice versa
                     val asset = gitHubReleaseResponse.assets?.firstOrNull {
