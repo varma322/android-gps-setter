@@ -1,10 +1,26 @@
+<!-- map pin on a crosshair; 108dp adaptive-icon grid, everything inside the 66dp safe zone -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="800dp"
-    android:height="800dp"
-    android:viewportWidth="800"
-    android:viewportHeight="800">
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+  <group android:pivotX="54" android:pivotY="54" android:scaleX="1.1" android:scaleY="1.1">
+  <!-- crosshair ring, gapped where the pin crosses it -->
   <path
-      android:fillColor="#FF000000"
-      android:pathData="M509.96,290.04L509.97,290L509.93,290.06L240,405.38L376.37,423.65L394.62,560L509.94,290.1L510,290.02L509.96,290.04Z"
-      android:fillType="nonZero"/>
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="3"
+      android:strokeLineCap="round"
+      android:pathData="M63.6,48.81A14,14 0,1 1,44.4 48.81" />
+  <!-- crosshair ticks -->
+  <path
+      android:strokeColor="#FFFFFFFF"
+      android:strokeWidth="3"
+      android:strokeLineCap="round"
+      android:pathData="M28,59L35.5,59M72.5,59L80,59M54,76L54,83" />
+  <!-- pin, tip on the crosshair centre, with a hole in the head -->
+  <path
+      android:fillColor="#FFFFFFFF"
+      android:fillType="evenOdd"
+      android:pathData="M54,59L43.94,43.55A12,12 0,1 1,64.06 43.55Z M49.5,37a4.5,4.5 0,1 0,9 0a4.5,4.5 0,1 0,-9 0Z" />
+  </group>
 </vector>
