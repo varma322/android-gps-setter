@@ -44,7 +44,9 @@ object LocationHook {
     private fun updateLocation() {
         try {
             mLastUpdated = System.currentTimeMillis()
-            started = settings.isStarted
+            val now = settings.isStarted
+            if (now != started) module.log(Log.INFO, TAG, "Spoofing ${if (now) "on" else "off"}")
+            started = now
             if (!started) return
             val x = (rand.nextInt(51) - 25).toDouble()
             val y = (rand.nextInt(51) - 25).toDouble()
@@ -96,6 +98,7 @@ object LocationHook {
     private inline fun safely(what: String, block: () -> Unit) {
         try {
             block()
+            module.log(Log.INFO, TAG, "Hooked $what")
         } catch (t: Throwable) {
             module.log(Log.WARN, TAG, "Skipping hook $what", t)
         }
@@ -103,11 +106,15 @@ object LocationHook {
 
     fun initSystemHooks(xposed: XposedModule, classLoader: ClassLoader) {
         init(xposed)
-        module.log(Log.INFO, TAG, "Hooking system server")
-        if (!settings.isHookedSystem) return
+        module.log(Log.INFO, TAG, "Hooking system server (SDK ${Build.VERSION.SDK_INT})")
+        if (!settings.isHookedSystem) {
+            module.log(Log.INFO, TAG, "System hook disabled in settings")
+            return
+        }
         val interval = 200
 
-        if (Build.VERSION.SDK_INT < 34) {
+        // LocationManagerService lived in com.android.server up to Android 10, com.android.server.location from 11
+        if (Build.VERSION.SDK_INT < 30) {
             val lms = classLoader.loadClass("com.android.server.LocationManagerService")
 
             safely("getLastLocation") {
@@ -139,11 +146,11 @@ object LocationHook {
                     safely(method.name) {
                         module.hook(method).intercept { chain -> if (isActive(interval)) fakeLocation() else chain.proceed() }
                     }
-                } else if (method.returnType == Void.TYPE &&
-                    method.name in listOf("startGnssBatch", "addGnssAntennaInfoListener", "addGnssMeasurementsListener", "addGnssNavigationMessageListener")
-                ) {
+                } else if (method.name in listOf("addGnssBatchingCallback", "startGnssBatch", "addGnssAntennaInfoListener", "addGnssMeasurementsListener", "addGnssNavigationMessageListener")) {
+                    // refuse raw GNSS data; these return boolean on Android 11 and void from 12
+                    val refused: Any? = if (method.returnType == Boolean::class.java) false else null
                     safely(method.name) {
-                        module.hook(method).intercept { chain -> if (isActive(interval)) null else chain.proceed() }
+                        module.hook(method).intercept { chain -> if (isActive(interval)) refused else chain.proceed() }
                     }
                 }
             }
@@ -152,7 +159,35 @@ object LocationHook {
                 module.hook(lms.getDeclaredMethod("injectLocation", Location::class.java))
                     .intercept { chain -> if (isActive(interval)) proceedWithFake(chain) else chain.proceed() }
             }
+
+            // Android 12+: every provider's fix (gps, network, fused, passive) passes through here on
+            // its way to the last-location cache and to every app listening for updates
+            if (Build.VERSION.SDK_INT >= 31) safely("onReportLocation") {
+                val lpm = classLoader.loadClass("com.android.server.location.provider.LocationProviderManager")
+                val result = Class.forName("android.location.LocationResult") // @SystemApi, not in the public SDK
+                val size = result.getMethod("size")
+                val get = result.getMethod("get", Int::class.java)
+                // Android 14+ only; on 12/13 there is no emergency state here to check
+                val emergency = try { lpm.getDeclaredField("mEmergencyHelper").apply { isAccessible = true } } catch (e: NoSuchFieldException) { null }
+                module.hook(lpm.getDeclaredMethod("onReportLocation", result)).intercept { chain ->
+                    if (isActive(interval) && !inEmergency(emergency?.get(chain.thisObject))) {
+                        val locations = chain.getArg(0)
+                        for (i in 0 until size.invoke(locations) as Int) {
+                            val location = get.invoke(locations, i) as Location
+                            location.set(fakeLocation(location))
+                        }
+                    }
+                    chain.proceed()
+                }
+            }
         }
+    }
+
+    // never hand emergency services a fake fix: during an emergency call/SMS real locations go through untouched
+    private fun inEmergency(helper: Any?): Boolean = helper != null && try {
+        helper.javaClass.getMethod("isInEmergency", Long::class.java).invoke(helper, 0L) as Boolean
+    } catch (t: Throwable) {
+        false
     }
 
     fun initAppHooks(xposed: XposedModule, packageName: String) {
