@@ -20,8 +20,8 @@ echo "- versionName: $VERSION_NAME"
 echo "- versionCode: $VERSION_CODE"
 sleep 4
 
-gsed -i "/def tagName =/c\def tagName = '$VERSION_NAME'" app/build.gradle
-gsed -i "/versionCode/c\        versionCode $VERSION_CODE" app/build.gradle
+sed -i "/def tagName =/c\def tagName = '$VERSION_NAME'" app/build.gradle
+sed -i "/versionCode/c\        versionCode $VERSION_CODE" app/build.gradle
 
 git commit -am "bump version"
 git tag $VERSION_STRING
