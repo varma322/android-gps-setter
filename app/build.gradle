@@ -7,7 +7,7 @@ plugins {
     id 'com.google.devtools.ksp'
 }
 
-def tagName = '0.0.6'
+def tagName = '0.1.0'
 
 android {
     compileSdk 36 // libxposed 101 requires it; targetSdk is what changes runtime behaviour
@@ -15,7 +15,7 @@ android {
         applicationId "io.github.varma322.gpssetter"
         minSdk 27
         targetSdk 34
-        versionCode 6
+        versionCode 10
         versionName tagName
         // testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "TAG_NAME", "\"${tagName}\"")
