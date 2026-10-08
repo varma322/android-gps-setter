@@ -45,8 +45,12 @@ class JoystickService : Service(),View.OnTouchListener,View.OnClickListener {
         mJoystickView?.setOnMoveListener { angle, strength, event ->
             val radians = Math.toRadians(angle.toDouble())
             try {
-                val factorX: Double = cos(radians) / 100000.0 * (strength / 30)
-                val factorY: Double = sin(radians) / 100000.0 * (strength / 30)
+                // strength is 0..100; /30.0 (not /30) keeps it smooth instead of integer steps 0/1/2/3,
+                // so the lightest ~30% of a push no longer does nothing
+                val steps = strength / 30.0
+                val factorY: Double = sin(radians) / 100000.0 * steps          // north/south
+                // scale east/west by 1/cos(lat) so a given push moves the same ground distance at any latitude
+                val factorX: Double = cos(radians) / 100000.0 * steps / cos(Math.toRadians(PrefManager.getLat))
                 lon = PrefManager.getLng + factorX
                 lat = PrefManager.getLat + factorY
                 updateLocation(lat, lon)

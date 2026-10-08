@@ -155,9 +155,11 @@ class ActivitySettings : AppCompatActivity() {
                     if (askOverlayPermission()){
                         if (isJoystickRunning()) {
                             requireContext().stopService(Intent(context,JoystickService::class.java))
+                            PrefManager.isJoystickEnabled = false // so it doesn't auto-start next launch
                             it.summary = "Joystick disabled"
                         } else if (PrefManager.isStarted) {
                             requireContext().startService(Intent(context,JoystickService::class.java))
+                            PrefManager.isJoystickEnabled = true
                             it.summary = "Joystick enabled"
                         } else {
                             requireContext().showToast(requireContext().getString(R.string.location_not_select))

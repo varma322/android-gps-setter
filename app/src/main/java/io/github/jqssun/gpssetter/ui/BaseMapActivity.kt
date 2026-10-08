@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
@@ -103,6 +104,14 @@ abstract class BaseMapActivity: AppCompatActivity() {
         setupNavView()
         setupButtons()
         setupDrawer()
+        // observe once; registering inside the Add dialog stacked an observer (and a toast) per save
+        viewModel.response.observe(this) {
+            showToast(getString(if (it == (-1).toLong()) R.string.cant_save else R.string.save))
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), PERMISSION_ID)
+        }
         if (PrefManager.isJoystickEnabled){
             startService(Intent(this, JoystickService::class.java))
         }
@@ -239,9 +248,6 @@ abstract class BaseMapActivity: AppCompatActivity() {
                   showToast(getString(R.string.location_not_select))
                 }else{
                     viewModel.storeFavorite(s, lat, lon)
-                    viewModel.response.observe(getActivityInstance()){
-                        if (it == (-1).toLong()) showToast(getString(R.string.cant_save)) else showToast(getString(R.string.save))
-                    }
                 }
             }
             setView(view)
@@ -359,7 +365,6 @@ abstract class BaseMapActivity: AppCompatActivity() {
                 Pattern.compile("[-+]?\\d{1,3}([.]\\d+)?, *[-+]?\\d{1,3}([.]\\d+)?").matcher(address)
 
             if (matcher.matches()){
-                delay(3000)
                 trySend(SearchProgress.Complete(matcher.group().split(",")[0].toDouble(),matcher.group().split(",")[1].toDouble()))
             }else {
                 try {
