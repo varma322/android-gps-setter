@@ -21,6 +21,10 @@ on:
   # schedule:
   #   - cron: '0 0 1 */2 *'
 
+# default GITHUB_TOKEN is read-only on forks; the release step needs to create releases
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
