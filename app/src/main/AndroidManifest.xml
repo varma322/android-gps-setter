@@ -41,6 +41,21 @@
             android:name=".utils.JoystickService"
             android:exported="false" />
 
+        <service
+            android:name=".utils.SpoofTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_baseline_my_location_24"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".utils.StopSpoofReceiver"
+            android:exported="false" />
+
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
