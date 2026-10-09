@@ -12,6 +12,8 @@ class FavoriteRepository @Inject constructor(private val favoriteDao: FavoriteDa
         val getAllFavorites: Flow<List<Favorite>>
         get() =  favoriteDao.getAllFavorites()
 
+        suspend fun getAllOnce(): List<Favorite> = favoriteDao.getAllOnce()
+
         @Suppress("RedundantSuspendModifier")
         @WorkerThread
         suspend fun addNewFavorite(favorite: Favorite) : Long {

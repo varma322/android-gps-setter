@@ -16,6 +16,8 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jqssun.gpssetter.BuildConfig
@@ -233,6 +235,31 @@ class MainViewModel @Inject constructor(
     }
 
 
+
+    // null = import failed to parse; otherwise the number of favorites imported
+    private val _importResult = MutableLiveData<Int?>()
+    val importResult: LiveData<Int?> = _importResult
+
+    suspend fun favoritesAsJson(): String = favoriteRepository.getAllOnce().let { Gson().toJson(it) }
+
+    fun importFavorites(json: String) = onIO {
+        try {
+            val type = object : TypeToken<List<Favorite>>() {}.type
+            val incoming: List<Favorite> = Gson().fromJson(json, type) ?: emptyList()
+            var nextId = (favoriteRepository.getAllOnce().maxOfOrNull { it.id ?: -1L } ?: -1L) + 1
+            var count = 0
+            for (f in incoming) {
+                val lat = f.lat ?: continue
+                val lng = f.lng ?: continue
+                favoriteRepository.addNewFavorite(Favorite(id = nextId++, address = f.address, lat = lat, lng = lng))
+                count++
+            }
+            _importResult.postValue(count)
+        } catch (e: Exception) {
+            Timber.tag("importFavorites").e(e)
+            _importResult.postValue(null)
+        }
+    }
 
      fun storeFavorite(
         address: String,
