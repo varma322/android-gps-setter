@@ -30,4 +30,6 @@ class FavoriteRepository @Inject constructor(private val favoriteDao: FavoriteDa
 
     }
 
+       fun getAllSync(): List<Favorite> = favoriteDao.getAllSync()
+
 }

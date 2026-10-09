@@ -18,3 +18,4 @@ local.properties
 .externalNativeBuild
 .cxx
 .vscode/
+docs/lsposed-module/

@@ -51,6 +51,36 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+        <service
+            android:name=".utils.FavoriteTileService1"
+            android:exported="true"
+            android:icon="@drawable/ic_baseline_favorite"
+            android:label="@string/favorite_tile_1"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".utils.FavoriteTileService2"
+            android:exported="true"
+            android:icon="@drawable/ic_baseline_favorite"
+            android:label="@string/favorite_tile_2"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".utils.FavoriteTileService3"
+            android:exported="true"
+            android:icon="@drawable/ic_baseline_favorite"
+            android:label="@string/favorite_tile_3"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".utils.StopSpoofReceiver"
