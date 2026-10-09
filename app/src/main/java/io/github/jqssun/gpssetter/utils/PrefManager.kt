@@ -31,6 +31,7 @@ object PrefManager   {
     private const val DARK_THEME = "dark_theme"
     private const val DISABLE_UPDATE = "update_disabled"
     private const val ENABLE_JOYSTICK = "joystick_enabled"
+    private const val ACCENT = "accent_color"
     // motion, set during route playback; static spoofing leaves these at the defaults below
     private const val ALTITUDE = "altitude_d" // Double bits
     private const val SPEED = "speed"         // m/s
@@ -142,6 +143,10 @@ object PrefManager   {
     var isJoystickEnabled: Boolean
         get() = pref.getBoolean(ENABLE_JOYSTICK, false)
         set(value) = pref.edit().putBoolean(ENABLE_JOYSTICK, value).apply()
+
+    var accentIndex: Int
+        get() = pref.getInt(ACCENT, 0) // default Blue
+        set(value) = pref.edit().putInt(ACCENT, value).apply()
 
     fun update(start:Boolean, la: Double, ln: Double) {
         runInBackground {

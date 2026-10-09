@@ -8,6 +8,12 @@ plugins {
 
 def tagName = '0.1.0'
 
+// OpenRouteService key for road routing, read from local.properties (never committed); CI injects it as a secret.
+// Empty is fine — the app falls back to keyless OSRM.
+def localProps = new Properties()
+def localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) localProps.load(new FileInputStream(localPropsFile))
+
 android {
     compileSdk 37 // libxposed 102 requires it; targetSdk is what changes runtime behaviour
     defaultConfig {
@@ -18,6 +24,7 @@ android {
         versionName tagName
         // testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "TAG_NAME", "\"${tagName}\"")
+        buildConfigField("String", "ORS_KEY", "\"${localProps.getProperty('ORS_KEY', '')}\"")
     }
     splits {
         abi {

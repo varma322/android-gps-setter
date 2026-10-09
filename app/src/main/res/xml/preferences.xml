@@ -13,6 +13,11 @@
             android:summary="%s"
             android:title="@string/dark_theme" />
 
+        <Preference
+            android:key="accent_color"
+            android:icon="@drawable/ic_dark_mode"
+            android:title="@string/accent_color" />
+
         <DropDownPreference
             android:title="Map"
             android:summary="%s"

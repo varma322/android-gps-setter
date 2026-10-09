@@ -5,9 +5,13 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
+import android.view.View
+import android.widget.LinearLayout
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -27,8 +31,11 @@ import androidx.preference.PreferenceDataStore
 import androidx.preference.PreferenceFragmentCompat
 import io.github.jqssun.gpssetter.R
 import io.github.jqssun.gpssetter.databinding.ActivitySettingsBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.jqssun.gpssetter.utils.Accent
 import io.github.jqssun.gpssetter.utils.JoystickService
 import io.github.jqssun.gpssetter.utils.PrefManager
+import io.github.jqssun.gpssetter.utils.applyAccent
 import io.github.jqssun.gpssetter.utils.ext.showToast
 
 class ActivitySettings : AppCompatActivity() {
@@ -79,10 +86,10 @@ class ActivitySettings : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyAccent()
         enableEdgeToEdge(navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
 
         setContentView(binding.root)
-        theme.applyStyle(com.google.android.material.R.style.Theme_Material3_DynamicColors_DayNight_NoActionBar, true)
         setSupportActionBar(binding.toolbar)
         if (savedInstanceState == null) {
             supportFragmentManager
@@ -141,6 +148,11 @@ class ActivitySettings : AppCompatActivity() {
                 }
             }
 
+            findPreference<Preference>("accent_color")?.let { pref ->
+                pref.summary = Accent.current().label
+                pref.setOnPreferenceClickListener { showAccentPicker(pref); true }
+            }
+
             findPreference<DropDownPreference>("dark_theme")?.setOnPreferenceChangeListener { _, newValue ->
                 val newMode = (newValue as String).toInt()
                 if (PrefManager.darkTheme != newMode) {
@@ -168,6 +180,36 @@ class ActivitySettings : AppCompatActivity() {
                     true
                 }
             }
+        }
+
+        private fun showAccentPicker(pref: Preference) {
+            val ctx = requireContext()
+            val d = resources.displayMetrics.density
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                val p = (24 * d).toInt(); setPadding(p, p, p, p)
+            }
+            val dialog = MaterialAlertDialogBuilder(ctx)
+                .setTitle(R.string.accent_color).setView(row).create()
+            val size = (40 * d).toInt(); val gap = (8 * d).toInt()
+            Accent.entries.forEachIndexed { i, accent ->
+                val sw = View(ctx)
+                sw.layoutParams = LinearLayout.LayoutParams(size, size).apply { marginStart = gap; marginEnd = gap }
+                sw.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(accent.color)
+                    if (i == PrefManager.accentIndex) setStroke((3 * d).toInt(), Color.WHITE)
+                }
+                sw.setOnClickListener {
+                    PrefManager.accentIndex = i
+                    pref.summary = accent.label
+                    dialog.dismiss()
+                    requireActivity().recreate()
+                }
+                row.addView(sw)
+            }
+            dialog.show()
         }
 
         private fun isJoystickRunning(): Boolean {

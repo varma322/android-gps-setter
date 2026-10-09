@@ -52,6 +52,7 @@ import io.github.jqssun.gpssetter.utils.JoystickService
 import io.github.jqssun.gpssetter.utils.NotificationsChannel
 import io.github.jqssun.gpssetter.utils.PrefManager
 import io.github.jqssun.gpssetter.utils.StopSpoofReceiver
+import io.github.jqssun.gpssetter.utils.applyAccent
 import io.github.jqssun.gpssetter.utils.ext.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.awaitClose
@@ -151,6 +152,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyAccent()
         enableEdgeToEdge(navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT))
 
         WindowCompat.setDecorFitsSystemWindows(window, false)

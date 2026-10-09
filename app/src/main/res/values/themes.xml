@@ -11,4 +11,36 @@
         <item name="actionOverflowMenuStyle">@style/GPSSetterOverflowMenu</item>
 
     </style>
+
+    <!-- Accent overlays; applied at runtime from the chosen accent (see Accent.kt) -->
+    <style name="ThemeOverlay.GPSSetter.Accent.Blue" parent="">
+        <item name="colorPrimary">#FF3B82F6</item>
+        <item name="colorOnPrimary">#FFFFFFFF</item>
+        <item name="colorPrimaryContainer">#FF1E3A8A</item>
+        <item name="colorOnPrimaryContainer">#FFDBEAFE</item>
+    </style>
+    <style name="ThemeOverlay.GPSSetter.Accent.Green" parent="">
+        <item name="colorPrimary">#FF22C55E</item>
+        <item name="colorOnPrimary">#FF04210F</item>
+        <item name="colorPrimaryContainer">#FF14532D</item>
+        <item name="colorOnPrimaryContainer">#FFDCFCE7</item>
+    </style>
+    <style name="ThemeOverlay.GPSSetter.Accent.Violet" parent="">
+        <item name="colorPrimary">#FF8B5CF6</item>
+        <item name="colorOnPrimary">#FFFFFFFF</item>
+        <item name="colorPrimaryContainer">#FF4C1D95</item>
+        <item name="colorOnPrimaryContainer">#FFEDE9FE</item>
+    </style>
+    <style name="ThemeOverlay.GPSSetter.Accent.Amber" parent="">
+        <item name="colorPrimary">#FFF6B73C</item>
+        <item name="colorOnPrimary">#FF2A1C00</item>
+        <item name="colorPrimaryContainer">#FF78350F</item>
+        <item name="colorOnPrimaryContainer">#FFFEF3C7</item>
+    </style>
+    <style name="ThemeOverlay.GPSSetter.Accent.Pink" parent="">
+        <item name="colorPrimary">#FFEC4899</item>
+        <item name="colorOnPrimary">#FFFFFFFF</item>
+        <item name="colorPrimaryContainer">#FF831843</item>
+        <item name="colorOnPrimaryContainer">#FFFCE7F3</item>
+    </style>
 </resources>
