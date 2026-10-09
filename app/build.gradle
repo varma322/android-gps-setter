@@ -9,7 +9,7 @@ plugins {
 def tagName = '0.1.0'
 
 android {
-    compileSdk 36 // libxposed 101 requires it; targetSdk is what changes runtime behaviour
+    compileSdk 37 // libxposed 102 requires it; targetSdk is what changes runtime behaviour
     defaultConfig {
         applicationId "io.github.varma322.gpssetter"
         minSdk 27
@@ -87,8 +87,8 @@ android {
 dependencies {
 
     // modern xposed api (LSPosed 2.x / Vector); service carries settings from the app to the hook
-    compileOnly 'io.github.libxposed:api:101.0.1'
-    implementation 'io.github.libxposed:service:101.0.0'
+    compileOnly 'io.github.libxposed:api:102.0.0'
+    implementation 'io.github.libxposed:service:102.0.0'
     implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
 
     // use microg (apache 2.0) and maplibre (bsd 2-clause)
