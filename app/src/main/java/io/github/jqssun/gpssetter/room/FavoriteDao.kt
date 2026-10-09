@@ -9,10 +9,6 @@ interface FavoriteDao {
         @Insert(onConflict = OnConflictStrategy.IGNORE)
         suspend fun insertToRoomDatabase(favorite: Favorite) : Long
 
-        // for update single favorite
-        @Update
-        suspend fun updateUserDetails(favorite: Favorite)
-
         //delete single favorite
         @Delete
         suspend fun deleteSingleFavorite(favorite: Favorite)

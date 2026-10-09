@@ -12,7 +12,7 @@ import io.github.jqssun.gpssetter.R
 import kotlin.math.cos
 import kotlin.math.sin
 
-class JoystickService : Service(),View.OnTouchListener,View.OnClickListener {
+class JoystickService : Service() {
 
     private var wm: WindowManager? = null
     private var mJoystickContainerView: View? = null
@@ -75,14 +75,6 @@ class JoystickService : Service(),View.OnTouchListener,View.OnClickListener {
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
-    }
-
-    override fun onTouch(v: View?, event: MotionEvent?): Boolean {
-        TODO("Not yet implemented")
-    }
-
-    override fun onClick(v: View?) {
-        TODO("Not yet implemented")
     }
 
     override fun onDestroy() {

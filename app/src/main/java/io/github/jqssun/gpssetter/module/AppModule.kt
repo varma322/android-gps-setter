@@ -8,13 +8,10 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.github.jqssun.gpssetter.module.util.ApplicationScope
 import io.github.jqssun.gpssetter.room.AppDatabase
 import io.github.jqssun.gpssetter.room.FavoriteDao
 import io.github.jqssun.gpssetter.update.GitHubService
 import io.github.jqssun.gpssetter.utils.PrefManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Singleton
@@ -44,11 +41,10 @@ object AppModule{
 
     @Provides
     @Singleton
-    fun provideDatabase(application: Application, callback: AppDatabase.Callback)
+    fun provideDatabase(application: Application)
             = Room.databaseBuilder(application, AppDatabase::class.java, "user_database")
         .allowMainThreadQueries()
         .fallbackToDestructiveMigration()
-        .addCallback(callback)
         .build()
 
 
@@ -61,10 +57,5 @@ object AppModule{
     @Provides
     fun provideSettingRepo() : PrefManager =
         PrefManager
-
-    @ApplicationScope
-    @Provides
-    @Singleton
-    fun providesApplicationScope() = CoroutineScope(SupervisorJob())
 
 }
