@@ -9,6 +9,8 @@
     <string name="address_not_found">Address not found</string>
     <string name="cant_save">Can\'t save</string>
     <string name="location_set">Location set</string>
+    <string name="tile_label">GPS Setter</string>
+    <string name="stop">Stop</string>
     <string name="title">Location set notification</string>
     <string name="des">Show notification when location is set</string>
     <string name="location_unset">Location unset</string>

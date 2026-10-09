@@ -3,6 +3,7 @@ package io.github.jqssun.gpssetter.ui
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -47,6 +48,7 @@ import io.github.jqssun.gpssetter.ui.viewmodel.MainViewModel
 import io.github.jqssun.gpssetter.utils.JoystickService
 import io.github.jqssun.gpssetter.utils.NotificationsChannel
 import io.github.jqssun.gpssetter.utils.PrefManager
+import io.github.jqssun.gpssetter.utils.StopSpoofReceiver
 import io.github.jqssun.gpssetter.utils.ext.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.awaitClose
@@ -383,6 +385,10 @@ abstract class BaseMapActivity: AppCompatActivity() {
     }
 
     protected fun showStartNotification(address: String){
+        val stopIntent = PendingIntent.getBroadcast(
+            this, 0, Intent(this, StopSpoofReceiver::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         notificationsChannel.showNotification(this){
             it.setSmallIcon(R.drawable.ic_stop)
             it.setContentTitle(getString(R.string.location_set))
@@ -390,6 +396,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
             it.setAutoCancel(true)
             it.setCategory(Notification.CATEGORY_EVENT)
             it.priority = NotificationCompat.PRIORITY_HIGH
+            it.addAction(R.drawable.ic_stop, getString(R.string.stop), stopIntent)
         }
     }
 
