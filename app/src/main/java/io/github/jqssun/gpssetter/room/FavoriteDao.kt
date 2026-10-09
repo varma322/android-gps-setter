@@ -27,4 +27,8 @@ interface FavoriteDao {
         @Query("SELECT * FROM favorite WHERE id = :id ORDER BY id DESC")
         fun getSingleFavorite(id: Long) : Favorite
 
+        // synchronous read for the QS favorite tiles (allowMainThreadQueries is enabled)
+        @Query("SELECT * FROM favorite ORDER BY id DESC")
+        fun getAllSync() : List<Favorite>
+
 }

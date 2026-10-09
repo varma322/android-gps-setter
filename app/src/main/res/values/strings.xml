@@ -17,6 +17,10 @@
     <string name="location_set">Location set</string>
     <string name="tile_label">GPS Setter</string>
     <string name="stop">Stop</string>
+    <string name="favorite_tile_1">Favorite 1</string>
+    <string name="favorite_tile_2">Favorite 2</string>
+    <string name="favorite_tile_3">Favorite 3</string>
+    <string name="favorite_tile_default">Favorite %d</string>
     <string name="title">Location set notification</string>
     <string name="des">Show notification when location is set</string>
     <string name="location_unset">Location unset</string>
