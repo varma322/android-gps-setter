@@ -17,7 +17,8 @@
             android:layout_height="?attr/actionBarSize"
             android:layout_marginTop="24dp"
             android:elevation="1dp"
-            app:navigationIcon="@drawable/ic_baseline_menu_24"/>
+            app:navigationIcon="@drawable/ic_baseline_menu_24"
+            app:navigationIconTint="@color/glass_ink"/>
 
         <include
             android:id="@+id/search"
@@ -44,7 +45,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/getlocation"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/GlassFab"
             android:contentDescription="@string/getlocation_desc"
             android:layout_width="64dp"
             android:layout_height="64dp"
@@ -69,7 +70,7 @@
         
         <com.google.android.material.button.MaterialButton
             android:id="@+id/addfavorite"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/GlassFab"
             android:contentDescription="@string/addfavorite_desc"
             android:layout_above="@id/getlocation"
             android:layout_width="64dp"
@@ -92,7 +93,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/start_button"
             android:contentDescription="@string/location_set"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/GlassFab"
             android:layout_above="@id/addfavorite"
             android:layout_width="64dp"
             android:layout_height="64dp"
@@ -105,17 +106,18 @@
             android:insetTop="0dp"
             android:insetRight="0dp"
             android:insetBottom="0dp"
-            app:icon="@drawable/ic_play" 
+            app:icon="@drawable/ic_play"
+            app:iconTint="?attr/colorPrimary"
             app:iconGravity="textStart"
             app:iconPadding="0dp"
-            app:iconSize="32dp" 
+            app:iconSize="32dp"
 
             android:visibility="visible" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/stop_button"
              android:contentDescription="@string/location_unset"
-            style="@style/Widget.Material3.Button.TonalButton"
+            style="@style/GlassFab"
             android:layout_above="@id/addfavorite"
             android:layout_width="64dp"
             android:layout_height="64dp"
