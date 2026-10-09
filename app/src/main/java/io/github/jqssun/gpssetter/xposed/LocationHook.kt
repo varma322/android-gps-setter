@@ -21,6 +21,10 @@ object LocationHook {
     @Volatile var newlat: Double = 45.0000
     @Volatile var newlng: Double = 0.0000
     @Volatile private var accuracy: Float = 10.0f
+    // motion for route playback; defaults mean static (no speed, bearing from the real fix)
+    @Volatile private var newAlt: Double = 0.0
+    @Volatile private var newSpeed: Float = 0f
+    @Volatile private var newBearing: Float = -1f
     private val rand: Random = Random()
     private lateinit var module: XposedModule
     private lateinit var settings: Xshare
@@ -62,6 +66,9 @@ object LocationHook {
             newlng =
                 if (settings.isRandomPosition) settings.getLng + GeoOffset.lngOffsetDegrees(east, settings.getLat) else settings.getLng
             accuracy = settings.accuracy?.toFloatOrNull()?.takeIf { it > 0f } ?: 10.0f
+            newAlt = settings.altitude
+            newSpeed = settings.speed
+            newBearing = settings.bearing
 
         } catch (e: Exception) {
             module.log(Log.ERROR, TAG, "Failed to read settings", e)
@@ -86,9 +93,14 @@ object LocationHook {
         location.longitude = if (newlat == 0.0 && newlng == 0.0) 0.000001 else newlng
         // LocationResult.validate() rejects accuracy <=0 or > 1,000,000 m; keep it sane
         location.accuracy = accuracy.coerceIn(1.0f, 10000.0f)
-        location.altitude = 0.0
-        location.speed = 0F
-        location.speedAccuracyMetersPerSecond = 0F
+        location.altitude = newAlt
+        location.speed = if (newSpeed > 0f) newSpeed else 0F
+        location.speedAccuracyMetersPerSecond = if (newSpeed > 0f) 1F else 0F
+        // route playback supplies a heading; otherwise keep the real fix's bearing (set above)
+        if (newBearing >= 0f) {
+            location.bearing = newBearing
+            location.bearingAccuracyDegrees = 1F
+        }
         try {
             HiddenApiBypass.invoke(location.javaClass, location, "setIsFromMockProvider", false)
         } catch (e: Exception) {

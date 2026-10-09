@@ -36,4 +36,14 @@ class Xshare(private val prefs: SharedPreferences) {
     val accuracy : String?
     get() = prefs.getString("accuracy_level","10")
 
+    // motion for route playback (defaults mean "static": no speed, bearing from the real fix)
+    val altitude: Double
+    get() = Double.fromBits(prefs.getLong("altitude_d", (0.0).toRawBits()))
+
+    val speed: Float
+    get() = prefs.getFloat("speed", 0f)
+
+    val bearing: Float
+    get() = prefs.getFloat("bearing", -1f)
+
 }

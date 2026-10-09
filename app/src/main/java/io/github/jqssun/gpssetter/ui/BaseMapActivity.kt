@@ -44,6 +44,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.github.jqssun.gpssetter.BuildConfig
 import io.github.jqssun.gpssetter.R
 import io.github.jqssun.gpssetter.adapter.FavListAdapter
+import io.github.jqssun.gpssetter.route.RoutePlaybackService
+import io.github.jqssun.gpssetter.route.parseGpx
 import io.github.jqssun.gpssetter.databinding.ActivityMapBinding
 import io.github.jqssun.gpssetter.ui.viewmodel.MainViewModel
 import io.github.jqssun.gpssetter.utils.JoystickService
@@ -103,6 +105,33 @@ abstract class BaseMapActivity: AppCompatActivity() {
                 else showToast(getString(R.string.favorites_import_failed))
             }
         }
+    private val gpxLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            lifecycleScope.launch {
+                val text = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }
+                val route = text?.let { parseGpx(it) }.orEmpty()
+                if (route.size < 2) showToast(getString(R.string.route_empty)) else askSpeedAndPlay(route)
+            }
+        }
+
+    private fun askSpeedAndPlay(route: List<io.github.jqssun.gpssetter.route.RoutePoint>) {
+        val input = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText("50")
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.route_speed_title)
+            .setView(input)
+            .setPositiveButton(R.string.play_route) { _, _ ->
+                val kmh = input.text.toString().toFloatOrNull()?.takeIf { it > 0f } ?: 50f
+                RoutePlaybackService.start(this, route, kmh / 3.6f, loop = false)
+                showToast(getString(R.string.route_started))
+            }
+            .show()
+    }
 
     private val elevationOverlayProvider by lazy {
         ElevationOverlayProvider(this)
@@ -228,6 +257,12 @@ abstract class BaseMapActivity: AppCompatActivity() {
                 }
                 R.id.import_favorites -> {
                     importFavoritesLauncher.launch(arrayOf("application/json"))
+                }
+                R.id.play_route -> {
+                    if (checkPermissions()) gpxLauncher.launch(arrayOf("*/*")) else requestPermissions()
+                }
+                R.id.stop_route -> {
+                    RoutePlaybackService.stop(this)
                 }
                 R.id.settings -> {
                     startActivity(Intent(this,ActivitySettings::class.java))

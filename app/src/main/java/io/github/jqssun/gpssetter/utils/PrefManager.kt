@@ -31,6 +31,10 @@ object PrefManager   {
     private const val DARK_THEME = "dark_theme"
     private const val DISABLE_UPDATE = "update_disabled"
     private const val ENABLE_JOYSTICK = "joystick_enabled"
+    // motion, set during route playback; static spoofing leaves these at the defaults below
+    private const val ALTITUDE = "altitude_d" // Double bits
+    private const val SPEED = "speed"         // m/s
+    private const val BEARING = "bearing"     // degrees, -1 = unset (use the real fix's bearing)
 
 
     private val pref: SharedPreferences by lazy {
@@ -69,7 +73,29 @@ object PrefManager   {
             .putBoolean(HOOKED_SYSTEM, isSystemHooked)
             .putBoolean(RANDOM_POSITION, isRandomPosition)
             .putString(ACCURACY_SETTING, accuracy)
+            .putLong(ALTITUDE, altitude.toRawBits())
+            .putFloat(SPEED, speed)
+            .putFloat(BEARING, bearing)
             .apply()
+    }
+
+    val altitude: Double
+        get() = if (pref.contains(ALTITUDE)) Double.fromBits(pref.getLong(ALTITUDE, 0)) else 0.0
+    val speed: Float get() = pref.getFloat(SPEED, 0f)
+    val bearing: Float get() = pref.getFloat(BEARING, -1f)
+
+    // route playback: move to a point with motion. start=true; mirror listener syncs to the hook.
+    fun updateMotion(la: Double, ln: Double, altitude: Double, speed: Float, bearing: Float) {
+        runInBackground {
+            pref.edit()
+                .putLong(LATITUDE_D, la.toRawBits())
+                .putLong(LONGITUDE_D, ln.toRawBits())
+                .putBoolean(START, true)
+                .putLong(ALTITUDE, altitude.toRawBits())
+                .putFloat(SPEED, speed)
+                .putFloat(BEARING, bearing)
+                .apply()
+        }
     }
 
 
@@ -123,6 +149,10 @@ object PrefManager   {
             prefEditor.putLong(LATITUDE_D, la.toRawBits())
             prefEditor.putLong(LONGITUDE_D, ln.toRawBits())
             prefEditor.putBoolean(START, start)
+            // static spoof: clear any motion left over from route playback
+            prefEditor.putLong(ALTITUDE, 0.0.toRawBits())
+            prefEditor.putFloat(SPEED, 0f)
+            prefEditor.putFloat(BEARING, -1f)
             prefEditor.apply()
         }
 
