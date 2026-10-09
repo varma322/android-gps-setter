@@ -6,6 +6,12 @@
     <string name="search">Search</string>
     <string name="address">United States</string>
     <string name="favorites">Favorites</string>
+    <string name="export_favorites">Export favorites</string>
+    <string name="import_favorites">Import favorites</string>
+    <string name="favorites_exported">Favorites exported</string>
+    <string name="favorites_imported">Imported %d favorites</string>
+    <string name="favorites_import_failed">Couldn\'t read that file</string>
+    <string name="export_failed">Export failed</string>
     <string name="address_not_found">Address not found</string>
     <string name="cant_save">Can\'t save</string>
     <string name="location_set">Location set</string>

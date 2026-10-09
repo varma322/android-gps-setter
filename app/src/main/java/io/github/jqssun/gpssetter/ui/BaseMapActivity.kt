@@ -21,6 +21,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AlertDialog
@@ -73,6 +74,34 @@ abstract class BaseMapActivity: AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val PERMISSION_ID = 42
 
+    // SAF pickers; registered as fields per the AndroidX ActivityResult contract
+    private val exportFavoritesLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            uri ?: return@registerForActivityResult
+            lifecycleScope.launch {
+                try {
+                    val json = viewModel.favoritesAsJson()
+                    withContext(Dispatchers.IO) {
+                        contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    }
+                    showToast(getString(R.string.favorites_exported))
+                } catch (e: Exception) {
+                    showToast(getString(R.string.export_failed))
+                }
+            }
+        }
+    private val importFavoritesLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            lifecycleScope.launch {
+                val text = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }
+                if (text != null) viewModel.importFavorites(text)
+                else showToast(getString(R.string.favorites_import_failed))
+            }
+        }
+
     private val elevationOverlayProvider by lazy {
         ElevationOverlayProvider(this)
     }
@@ -107,6 +136,9 @@ abstract class BaseMapActivity: AppCompatActivity() {
         // observe once; registering inside the Add dialog stacked an observer (and a toast) per save
         viewModel.response.observe(this) {
             showToast(getString(if (it == (-1).toLong()) R.string.cant_save else R.string.save))
+        }
+        viewModel.importResult.observe(this) { n ->
+            showToast(if (n != null) getString(R.string.favorites_imported, n) else getString(R.string.favorites_import_failed))
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -188,6 +220,12 @@ abstract class BaseMapActivity: AppCompatActivity() {
             when(it.itemId){
                 R.id.get_favorite -> {
                     openFavoriteListDialog()
+                }
+                R.id.export_favorites -> {
+                    exportFavoritesLauncher.launch("favorites.json")
+                }
+                R.id.import_favorites -> {
+                    importFavoritesLauncher.launch(arrayOf("application/json"))
                 }
                 R.id.settings -> {
                     startActivity(Intent(this,ActivitySettings::class.java))

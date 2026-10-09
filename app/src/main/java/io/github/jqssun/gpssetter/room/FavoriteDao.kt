@@ -18,6 +18,10 @@ interface FavoriteDao {
         @Query("SELECT * FROM favorite ORDER BY id DESC")
         fun getAllFavorites() : Flow<List<Favorite>>
 
+        // one-shot read for export
+        @Query("SELECT * FROM favorite ORDER BY id DESC")
+        suspend fun getAllOnce() : List<Favorite>
+
         //get single favorite inserted to room database
         @Transaction
         @Query("SELECT * FROM favorite WHERE id = :id ORDER BY id DESC")
