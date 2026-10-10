@@ -209,9 +209,9 @@
 
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="14dp">
                         <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="@color/glass_ink_dim" android:text="@string/route_speed"/>
-                        <com.google.android.material.button.MaterialButton android:id="@+id/speed_minus" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="44dp" android:layout_height="44dp" android:insetTop="0dp" android:insetBottom="0dp" android:text="−"/>
+                        <com.google.android.material.button.MaterialButton android:id="@+id/speed_minus" style="@style/SpeedStepper" android:layout_width="44dp" android:layout_height="44dp" android:insetTop="0dp" android:insetBottom="0dp" android:text="−"/>
                         <TextView android:id="@+id/speed_value" android:layout_width="92dp" android:layout_height="wrap_content" android:gravity="center" android:textColor="@color/glass_ink" android:textStyle="bold" tools:text="50 km/h"/>
-                        <com.google.android.material.button.MaterialButton android:id="@+id/speed_plus" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="44dp" android:layout_height="44dp" android:insetTop="0dp" android:insetBottom="0dp" android:text="+"/>
+                        <com.google.android.material.button.MaterialButton android:id="@+id/speed_plus" style="@style/SpeedStepper" android:layout_width="44dp" android:layout_height="44dp" android:insetTop="0dp" android:insetBottom="0dp" android:text="+"/>
                     </LinearLayout>
 
                     <TextView android:id="@+id/route_summary_tv" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="10dp" android:textColor="@color/glass_ink_dim" android:textSize="12.5sp" android:visibility="gone" tools:text="2.1 km · about 7 min"/>

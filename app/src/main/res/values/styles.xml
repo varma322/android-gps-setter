@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <style name="SpeedStepper" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="backgroundTint">@color/glass_fill</item>
+        <item name="strokeColor">@color/glass_stroke</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">20sp</item>
+        <item name="cornerRadius">22dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
     <style name="GlassFab" parent="Widget.Material3.Button.TonalButton">
         <item name="backgroundTint">@color/glass_fill</item>
         <item name="strokeColor">@color/glass_stroke</item>
