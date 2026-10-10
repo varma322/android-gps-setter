@@ -13,6 +13,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.View
@@ -44,8 +45,12 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.github.jqssun.gpssetter.BuildConfig
 import io.github.jqssun.gpssetter.R
 import io.github.jqssun.gpssetter.adapter.FavListAdapter
+import io.github.jqssun.gpssetter.route.RouteMath
 import io.github.jqssun.gpssetter.route.RoutePlaybackService
+import io.github.jqssun.gpssetter.route.RoutePoint
+import io.github.jqssun.gpssetter.route.Routing
 import io.github.jqssun.gpssetter.route.parseGpx
+import kotlin.math.roundToInt
 import io.github.jqssun.gpssetter.databinding.ActivityMapBinding
 import io.github.jqssun.gpssetter.ui.viewmodel.MainViewModel
 import io.github.jqssun.gpssetter.utils.JoystickService
@@ -174,6 +179,103 @@ abstract class BaseMapActivity: AppCompatActivity() {
         return bmp
     }
 
+    // ---- Route mode (Static / Route toggle, A->B selection, playback) ----
+    private var routeMode = false
+    private var aPoint: Pair<Double, Double>? = null
+    private var bPoint: Pair<Double, Double>? = null
+    private var roadPoints: List<RoutePoint>? = null
+    private var speedKmh = 50
+    private val travelerHandler = Handler(Looper.getMainLooper())
+    private val travelerTick = object : Runnable {
+        override fun run() {
+            setTraveler(PrefManager.getLat, PrefManager.getLng)
+            travelerHandler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun setupRouteMode() {
+        updateSpeedLabel()
+        binding.modeToggle.check(R.id.mode_static)
+        binding.modeToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            routeMode = checkedId == R.id.mode_route
+            binding.routeControls.visibility = if (routeMode) View.VISIBLE else View.GONE
+            if (routeMode) {
+                binding.startButton.visibility = View.GONE
+                binding.stopButton.visibility = View.GONE
+            } else {
+                resetRoute()
+                binding.startButton.visibility = if (viewModel.isStarted) View.GONE else View.VISIBLE
+                binding.stopButton.visibility = if (viewModel.isStarted) View.VISIBLE else View.GONE
+            }
+        }
+        binding.speedMinus.setOnClickListener { speedKmh = (speedKmh - 10).coerceAtLeast(5); updateSpeedLabel() }
+        binding.speedPlus.setOnClickListener { speedKmh = (speedKmh + 10).coerceAtMost(300); updateSpeedLabel() }
+        binding.routeStart.setOnClickListener { startRoutePlayback() }
+        binding.routeStop.setOnClickListener { stopRoutePlayback() }
+    }
+
+    private fun updateSpeedLabel() { binding.speedValue.text = getString(R.string.route_speed_fmt, speedKmh) }
+
+    // Flavors call this from onMapClick; returns true when route mode consumed the tap.
+    protected fun onMapTapped(latTapped: Double, lngTapped: Double): Boolean {
+        if (!routeMode) return false
+        if (aPoint == null) {
+            aPoint = latTapped to lngTapped
+            setTraveler(latTapped, lngTapped)
+            binding.routeAb.text = getString(R.string.route_pick_b)
+        } else {
+            bPoint = latTapped to lngTapped
+            routeAtoB()
+        }
+        return true
+    }
+
+    private fun routeAtoB() {
+        val a = aPoint ?: return
+        val b = bPoint ?: return
+        binding.routeAb.text = getString(R.string.route_routing)
+        binding.routeStart.isEnabled = false
+        lifecycleScope.launch {
+            val road = Routing.road(RoutePoint(a.first, a.second), RoutePoint(b.first, b.second))
+            if (road.size < 2) { binding.routeAb.text = getString(R.string.route_no_road); return@launch }
+            roadPoints = road
+            drawRoute(road.map { it.lat to it.lng })
+            val meters = RouteMath.pathLength(road)
+            val mins = (meters / (speedKmh / 3.6) / 60.0).roundToInt().coerceAtLeast(1)
+            binding.routeAb.text = getString(R.string.route_summary, formatDistance(meters), "$mins min")
+            binding.routeStart.isEnabled = true
+        }
+    }
+
+    private fun startRoutePlayback() {
+        val road = roadPoints ?: return
+        RoutePlaybackService.start(this, road, speedKmh / 3.6f, loop = false)
+        binding.routeStart.visibility = View.GONE
+        binding.routeStop.visibility = View.VISIBLE
+        travelerHandler.post(travelerTick)
+    }
+
+    private fun stopRoutePlayback() {
+        RoutePlaybackService.stop(this)
+        travelerHandler.removeCallbacks(travelerTick)
+        binding.routeStop.visibility = View.GONE
+        binding.routeStart.visibility = View.VISIBLE
+    }
+
+    private fun resetRoute() {
+        aPoint = null; bPoint = null; roadPoints = null
+        binding.routeAb.text = getString(R.string.route_pick_a)
+        binding.routeStart.isEnabled = false
+        binding.routeStart.visibility = View.VISIBLE
+        binding.routeStop.visibility = View.GONE
+        travelerHandler.removeCallbacks(travelerTick)
+        clearRoute()
+    }
+
+    private fun formatDistance(meters: Double): String =
+        if (meters >= 1000) String.format("%.1f km", meters / 1000) else "${meters.roundToInt()} m"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyAccent()
@@ -190,6 +292,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
         setupNavView()
         setupButtons()
         setupDrawer()
+        setupRouteMode()
         // observe once; registering inside the Add dialog stacked an observer (and a toast) per save
         viewModel.response.observe(this) {
             showToast(getString(if (it == (-1).toLong()) R.string.cant_save else R.string.save))

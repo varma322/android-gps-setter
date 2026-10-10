@@ -140,6 +140,7 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
         }
     }
     override fun onMapClick(latLng: LatLng): Boolean {
+        if (onMapTapped(latLng.latitude, latLng.longitude)) return true
         mLatLng = latLng
         updateMarker(latLng)
         mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))

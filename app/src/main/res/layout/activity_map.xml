@@ -3,6 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/container"
     android:orientation="vertical"
     android:fitsSystemWindows="false">
@@ -136,6 +137,121 @@
             app:iconSize="32dp" 
 
             android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/route_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="24dp"
+            android:orientation="vertical"
+            android:background="@drawable/search_box_background"
+            android:padding="14dp"
+            android:elevation="10dp">
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/mode_toggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/mode_static"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/mode_static" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/mode_route"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/mode_route" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <LinearLayout
+                android:id="@+id/route_controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="12dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/route_ab"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/glass_ink"
+                    android:text="@string/route_pick_a" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/glass_ink_dim"
+                        android:text="@string/route_speed" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/speed_minus"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="−" />
+
+                    <TextView
+                        android:id="@+id/speed_value"
+                        android:layout_width="96dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:textColor="@color/glass_ink"
+                        android:textStyle="bold"
+                        tools:text="50 km/h" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/speed_plus"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="+" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/route_start"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:enabled="false"
+                    app:icon="@drawable/ic_play"
+                    android:text="@string/route_start" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/route_stop"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_stop"
+                    android:text="@string/stop_route" />
+            </LinearLayout>
+        </LinearLayout>
 
     </RelativeLayout>
 

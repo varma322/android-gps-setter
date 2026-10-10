@@ -113,6 +113,7 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, GoogleMap.OnMapClickLi
         }
     }
     override fun onMapClick(latLng: LatLng) {
+        if (onMapTapped(latLng.latitude, latLng.longitude)) return
         mLatLng = latLng
         mMarker?.let { marker ->
             mLatLng.let {

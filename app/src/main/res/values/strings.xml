@@ -16,6 +16,16 @@
     <string name="cant_save">Can\'t save</string>
     <string name="location_set">Location set</string>
     <string name="accent_color">Accent colour</string>
+    <string name="mode_static">Static</string>
+    <string name="mode_route">Route</string>
+    <string name="route_speed">Speed</string>
+    <string name="route_speed_fmt">%d km/h</string>
+    <string name="route_start">Start route</string>
+    <string name="route_pick_a">Tap the map to set A (start)</string>
+    <string name="route_pick_b">Tap the map to set B (destination)</string>
+    <string name="route_routing">Finding a route…</string>
+    <string name="route_summary">%1$s · about %2$s</string>
+    <string name="route_no_road">Couldn\'t find a road route</string>
     <string name="play_route">Play route (GPX)</string>
     <string name="stop_route">Stop route</string>
     <string name="route_channel">Route playback</string>
