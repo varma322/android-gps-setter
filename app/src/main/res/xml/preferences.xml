@@ -13,9 +13,10 @@
             android:summary="%s"
             android:title="@string/dark_theme" />
 
-        <Preference
+        <io.github.jqssun.gpssetter.ui.AccentPreference
             android:key="accent_color"
             android:icon="@drawable/ic_dark_mode"
+            android:selectable="false"
             android:title="@string/accent_color" />
 
         <DropDownPreference

@@ -1,5 +1,6 @@
 <resources>
-    <style name="Theme.GPSSetter" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Committed dark for the glassmorphism look; light theme is a separate effort. -->
+    <style name="Theme.GPSSetter" parent="Theme.Material3.Dark.NoActionBar">
 
         <item name="colorPrimary">@color/primary</item>
 

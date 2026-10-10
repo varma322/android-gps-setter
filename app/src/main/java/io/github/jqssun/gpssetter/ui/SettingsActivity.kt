@@ -148,11 +148,6 @@ class ActivitySettings : AppCompatActivity() {
                 }
             }
 
-            findPreference<Preference>("accent_color")?.let { pref ->
-                pref.summary = Accent.current().label
-                pref.setOnPreferenceClickListener { showAccentPicker(pref); true }
-            }
-
             findPreference<DropDownPreference>("dark_theme")?.setOnPreferenceChangeListener { _, newValue ->
                 val newMode = (newValue as String).toInt()
                 if (PrefManager.darkTheme != newMode) {
@@ -180,36 +175,6 @@ class ActivitySettings : AppCompatActivity() {
                     true
                 }
             }
-        }
-
-        private fun showAccentPicker(pref: Preference) {
-            val ctx = requireContext()
-            val d = resources.displayMetrics.density
-            val row = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-                val p = (24 * d).toInt(); setPadding(p, p, p, p)
-            }
-            val dialog = MaterialAlertDialogBuilder(ctx)
-                .setTitle(R.string.accent_color).setView(row).create()
-            val size = (40 * d).toInt(); val gap = (8 * d).toInt()
-            Accent.entries.forEachIndexed { i, accent ->
-                val sw = View(ctx)
-                sw.layoutParams = LinearLayout.LayoutParams(size, size).apply { marginStart = gap; marginEnd = gap }
-                sw.background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(accent.color)
-                    if (i == PrefManager.accentIndex) setStroke((3 * d).toInt(), Color.WHITE)
-                }
-                sw.setOnClickListener {
-                    PrefManager.accentIndex = i
-                    pref.summary = accent.label
-                    dialog.dismiss()
-                    requireActivity().recreate()
-                }
-                row.addView(sw)
-            }
-            dialog.show()
         }
 
         private fun isJoystickRunning(): Boolean {
