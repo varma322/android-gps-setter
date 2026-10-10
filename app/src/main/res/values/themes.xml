@@ -9,7 +9,22 @@
         <item name="android:windowLightNavigationBar">@bool/lightStatusNav</item>
         <item name="android:overScrollMode">@integer/overscroll_enabled</item>
         <item name="actionOverflowMenuStyle">@style/GPSSetterOverflowMenu</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.GPSSetter.GlassDialog</item>
 
+    </style>
+
+    <!-- Glass dialogs: dark translucent card, light ink, accent buttons -->
+    <style name="ThemeOverlay.GPSSetter.GlassDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/glass_dialog_fill</item>
+        <item name="colorOnSurface">@color/glass_ink</item>
+        <item name="android:textColorPrimary">@color/glass_ink</item>
+        <item name="android:textColorSecondary">@color/glass_ink_dim</item>
+        <item name="android:backgroundDimAmount">0.45</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.GPSSetter.Dialog</item>
+    </style>
+    <style name="ShapeAppearance.GPSSetter.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
     </style>
 
     <!-- Accent overlays; applied at runtime from the chosen accent (see Accent.kt) -->
