@@ -128,6 +128,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
             .setView(input)
             .setPositiveButton(R.string.play_route) { _, _ ->
                 val kmh = input.text.toString().toFloatOrNull()?.takeIf { it > 0f } ?: 50f
+                drawRoute(route.map { it.lat to it.lng })
                 RoutePlaybackService.start(this, route, kmh / 3.6f, loop = false)
                 showToast(getString(R.string.route_started))
             }
@@ -149,6 +150,29 @@ abstract class BaseMapActivity: AppCompatActivity() {
     protected abstract fun initializeMap()
     protected abstract fun setupButtons()
     protected abstract fun moveMapToNewLocation(moveNewLocation: Boolean)
+
+    // Route overlay (flavor-specific map): polyline + A/B markers, and a moving traveler dot.
+    protected abstract fun drawRoute(points: List<Pair<Double, Double>>)
+    protected abstract fun clearRoute()
+    protected abstract fun setTraveler(lat: Double, lng: Double)
+
+    // A circular marker bitmap (filled dot with a white ring) for A/B/traveler markers.
+    protected fun dotBitmap(color: Int): android.graphics.Bitmap {
+        val d = resources.displayMetrics.density
+        val size = (20 * d).toInt()
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val r = size / 2f
+        val ring = 2f * d
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = color
+        canvas.drawCircle(r, r, r - ring, p)
+        p.color = android.graphics.Color.WHITE
+        p.style = android.graphics.Paint.Style.STROKE
+        p.strokeWidth = ring
+        canvas.drawCircle(r, r, r - ring, p)
+        return bmp
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

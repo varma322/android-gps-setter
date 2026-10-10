@@ -11,12 +11,17 @@ import io.github.jqssun.gpssetter.R
 import io.github.jqssun.gpssetter.utils.ext.getAddress
 import io.github.jqssun.gpssetter.utils.ext.showToast
 import kotlinx.coroutines.launch
+import io.github.jqssun.gpssetter.utils.Accent
 import org.maplibre.android.MapLibre
+import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.annotations.Polyline
+import org.maplibre.android.annotations.PolylineOptions
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
@@ -147,6 +152,39 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
 
     override fun getActivityInstance(): BaseMapActivity {
         return this@MapActivity
+    }
+
+    private var routeLine: Polyline? = null
+    private var aMarker: Marker? = null
+    private var bMarker: Marker? = null
+    private var travelerMarker: Marker? = null
+
+    override fun drawRoute(points: List<Pair<Double, Double>>) {
+        clearRoute()
+        if (points.size < 2) return
+        val lls = points.map { LatLng(it.first, it.second) }
+        routeLine = mMap.addPolyline(PolylineOptions().addAll(lls).color(Accent.current().color).width(4f))
+        val ic = IconFactory.getInstance(this)
+        aMarker = mMap.addMarker(MarkerOptions().position(lls.first()).icon(ic.fromBitmap(dotBitmap(0xFF22C55E.toInt()))))
+        bMarker = mMap.addMarker(MarkerOptions().position(lls.last()).icon(ic.fromBitmap(dotBitmap(0xFFEF4444.toInt()))))
+        val bounds = LatLngBounds.Builder().includes(lls).build()
+        mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 120))
+    }
+
+    override fun clearRoute() {
+        routeLine?.remove(); routeLine = null
+        aMarker?.remove(); aMarker = null
+        bMarker?.remove(); bMarker = null
+        travelerMarker?.remove(); travelerMarker = null
+    }
+
+    override fun setTraveler(lat: Double, lng: Double) {
+        val pos = LatLng(lat, lng)
+        if (travelerMarker == null) {
+            travelerMarker = mMap.addMarker(MarkerOptions().position(pos).icon(IconFactory.getInstance(this).fromBitmap(dotBitmap(Accent.current().color))))
+        } else {
+            travelerMarker?.position = pos
+        }
     }
 
     @SuppressLint("MissingPermission")
