@@ -35,6 +35,18 @@ object RouteMath {
         return total
     }
 
+    // Cumulative distance to the route vertex nearest (lat,lng) — how far along the route you are.
+    fun distanceAlong(points: List<RoutePoint>, lat: Double, lng: Double): Double {
+        if (points.isEmpty()) return 0.0
+        var cum = 0.0; var best = 0.0; var bestD = Double.MAX_VALUE
+        for (i in points.indices) {
+            if (i > 0) cum += haversineMeters(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng)
+            val d = haversineMeters(points[i].lat, points[i].lng, lat, lng)
+            if (d < bestD) { bestD = d; best = cum }
+        }
+        return best
+    }
+
     // Position/heading/altitude at cumulative [distanceMeters] along the polyline.
     // Clamps to the first point at/below 0 and the last point at/beyond the end.
     fun pointAtDistance(points: List<RoutePoint>, distanceMeters: Double): Fix? {

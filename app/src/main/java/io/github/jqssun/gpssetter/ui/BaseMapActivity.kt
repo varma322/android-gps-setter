@@ -179,16 +179,21 @@ abstract class BaseMapActivity: AppCompatActivity() {
         return bmp
     }
 
-    // ---- Route mode (Static / Route toggle, A->B selection, playback) ----
+    // ---- Route mode (Static / Route toggle, A->B directions, playback) ----
     private var routeMode = false
     private var aPoint: Pair<Double, Double>? = null
     private var bPoint: Pair<Double, Double>? = null
+    private var aName = ""
+    private var bName = ""
     private var roadPoints: List<RoutePoint>? = null
+    private var totalMeters = 0.0
     private var speedKmh = 50
     private val travelerHandler = Handler(Looper.getMainLooper())
     private val travelerTick = object : Runnable {
         override fun run() {
-            setTraveler(PrefManager.getLat, PrefManager.getLng)
+            val lat = PrefManager.getLat; val lng = PrefManager.getLng
+            setTraveler(lat, lng)
+            updateTravelStats(lat, lng)
             travelerHandler.postDelayed(this, 1000)
         }
     }
@@ -203,6 +208,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
             if (routeMode) {
                 binding.startButton.visibility = View.GONE
                 binding.stopButton.visibility = View.GONE
+                showSetup()
             } else {
                 resetRoute()
                 binding.startButton.visibility = if (viewModel.isStarted) View.GONE else View.VISIBLE
@@ -213,7 +219,17 @@ abstract class BaseMapActivity: AppCompatActivity() {
         binding.speedPlus.setOnClickListener { speedKmh = (speedKmh + 10).coerceAtMost(300); updateSpeedLabel() }
         binding.routeStart.setOnClickListener { startRoutePlayback() }
         binding.routeStop.setOnClickListener { stopRoutePlayback() }
+        binding.routeCancel.setOnClickListener { resetRoute() }
+        binding.routeSwap.setOnClickListener { swapAB() }
+        binding.travelExpand.setOnClickListener {
+            val shown = binding.travelDetails.visibility != View.VISIBLE
+            binding.travelDetails.visibility = if (shown) View.VISIBLE else View.GONE
+            binding.travelExpand.rotation = if (shown) 90f else 270f
+        }
     }
+
+    private fun showSetup() { binding.routeSetup.visibility = View.VISIBLE; binding.routeTravel.visibility = View.GONE }
+    private fun showTravel() { binding.routeSetup.visibility = View.GONE; binding.routeTravel.visibility = View.VISIBLE }
 
     private fun updateSpeedLabel() { binding.speedValue.text = getString(R.string.route_speed_fmt, speedKmh) }
 
@@ -223,9 +239,12 @@ abstract class BaseMapActivity: AppCompatActivity() {
         if (aPoint == null) {
             aPoint = latTapped to lngTapped
             setTraveler(latTapped, lngTapped)
-            binding.routeAb.text = getString(R.string.route_pick_b)
+            binding.routeAName.text = getString(R.string.route_locating)
+            lifecycleScope.launch { aName = shortAddress(latTapped, lngTapped); binding.routeAName.text = aName }
         } else {
             bPoint = latTapped to lngTapped
+            binding.routeBName.text = getString(R.string.route_locating)
+            lifecycleScope.launch { bName = shortAddress(latTapped, lngTapped); binding.routeBName.text = bName }
             routeAtoB()
         }
         return true
@@ -234,43 +253,76 @@ abstract class BaseMapActivity: AppCompatActivity() {
     private fun routeAtoB() {
         val a = aPoint ?: return
         val b = bPoint ?: return
-        binding.routeAb.text = getString(R.string.route_routing)
         binding.routeStart.isEnabled = false
+        binding.routeSummaryTv.visibility = View.VISIBLE
+        binding.routeSummaryTv.text = getString(R.string.route_routing)
         lifecycleScope.launch {
             val road = Routing.road(RoutePoint(a.first, a.second), RoutePoint(b.first, b.second))
-            if (road.size < 2) { binding.routeAb.text = getString(R.string.route_no_road); return@launch }
+            if (road.size < 2) { binding.routeSummaryTv.text = getString(R.string.route_no_road); return@launch }
             roadPoints = road
+            totalMeters = RouteMath.pathLength(road)
             drawRoute(road.map { it.lat to it.lng })
-            val meters = RouteMath.pathLength(road)
-            val mins = (meters / (speedKmh / 3.6) / 60.0).roundToInt().coerceAtLeast(1)
-            binding.routeAb.text = getString(R.string.route_summary, formatDistance(meters), "$mins min")
+            val mins = (totalMeters / (speedKmh / 3.6) / 60.0).roundToInt().coerceAtLeast(1)
+            binding.routeSummaryTv.text = getString(R.string.route_summary, formatDistance(totalMeters), "$mins min")
             binding.routeStart.isEnabled = true
         }
+    }
+
+    private fun swapAB() {
+        val a = aPoint; val b = bPoint ?: return
+        aPoint = b; bPoint = a
+        val an = aName; aName = bName; bName = an
+        binding.routeAName.text = aName
+        binding.routeBName.text = bName
+        routeAtoB()
     }
 
     private fun startRoutePlayback() {
         val road = roadPoints ?: return
         RoutePlaybackService.start(this, road, speedKmh / 3.6f, loop = false)
-        binding.routeStart.visibility = View.GONE
-        binding.routeStop.visibility = View.VISIBLE
+        binding.travelDetails.text = "A  $aName\nB  $bName"
+        showTravel()
         travelerHandler.post(travelerTick)
     }
 
     private fun stopRoutePlayback() {
         RoutePlaybackService.stop(this)
         travelerHandler.removeCallbacks(travelerTick)
-        binding.routeStop.visibility = View.GONE
-        binding.routeStart.visibility = View.VISIBLE
+        showSetup()
+    }
+
+    private fun updateTravelStats(lat: Double, lng: Double) {
+        val road = roadPoints ?: return
+        val travelled = RouteMath.distanceAlong(road, lat, lng)
+        binding.travelDist.text = formatDistance(travelled)
+        val mps = PrefManager.speed
+        binding.travelSpeed.text = getString(R.string.route_speed_fmt, (mps * 3.6).roundToInt())
+        binding.travelProgress.setProgressCompat(
+            if (totalMeters > 0) (travelled / totalMeters * 100).roundToInt().coerceIn(0, 100) else 0, true
+        )
+        val remaining = (totalMeters - travelled).coerceAtLeast(0.0)
+        val eta = if (mps > 0.5f) (remaining / mps).roundToInt() else 0
+        binding.travelEta.text = String.format("%d:%02d", eta / 60, eta % 60)
     }
 
     private fun resetRoute() {
-        aPoint = null; bPoint = null; roadPoints = null
-        binding.routeAb.text = getString(R.string.route_pick_a)
+        aPoint = null; bPoint = null; roadPoints = null; aName = ""; bName = ""; totalMeters = 0.0
+        binding.routeAName.text = getString(R.string.route_pick_a)
+        binding.routeBName.text = getString(R.string.route_b_placeholder)
+        binding.routeSummaryTv.visibility = View.GONE
         binding.routeStart.isEnabled = false
-        binding.routeStart.visibility = View.VISIBLE
-        binding.routeStop.visibility = View.GONE
         travelerHandler.removeCallbacks(travelerTick)
+        showSetup()
         clearRoute()
+    }
+
+    private suspend fun shortAddress(lat: Double, lng: Double): String = withContext(Dispatchers.IO) {
+        val name = try {
+            android.location.Geocoder(this@BaseMapActivity).getFromLocation(lat, lng, 1)?.firstOrNull()?.let {
+                it.subLocality ?: it.locality ?: it.featureName ?: it.getAddressLine(0)
+            }
+        } catch (e: Exception) { null }
+        name ?: String.format("%.5f, %.5f", lat, lng)
     }
 
     private fun formatDistance(meters: Double): String =

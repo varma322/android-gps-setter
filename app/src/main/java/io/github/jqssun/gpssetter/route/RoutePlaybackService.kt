@@ -57,11 +57,15 @@ class RoutePlaybackService : Service() {
 
     private suspend fun run(route: List<RoutePoint>, speed: Float, loop: Boolean) {
         val total = RouteMath.pathLength(route)
+        val accel = speed / 4.0 // ramp from 0 to target over ~4 s, so starts/stops feel real
+        var curSpeed = 0.0
         var distance = 0.0
         var last = SystemClock.elapsedRealtime()
         while (scope.isActive) {
             val now = SystemClock.elapsedRealtime()
-            distance += speed * (now - last) / 1000.0
+            val dt = (now - last) / 1000.0
+            curSpeed = (curSpeed + accel * dt).coerceAtMost(speed.toDouble())
+            distance += curSpeed * dt
             last = now
             if (distance >= total) {
                 if (loop) {
@@ -74,7 +78,7 @@ class RoutePlaybackService : Service() {
                 }
             }
             RouteMath.pointAtDistance(route, distance)?.let { fix ->
-                PrefManager.updateMotion(fix.lat, fix.lng, fix.altitude, speed, fix.bearing)
+                PrefManager.updateMotion(fix.lat, fix.lng, fix.altitude, curSpeed.toFloat(), fix.bearing)
                 notify(progress = if (total > 0) (distance / total * 100).toInt().coerceIn(0, 100) else 0)
             }
             delay(1000)

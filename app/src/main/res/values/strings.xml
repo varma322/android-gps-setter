@@ -26,6 +26,16 @@
     <string name="route_routing">Finding a route…</string>
     <string name="route_summary">%1$s · about %2$s</string>
     <string name="route_no_road">Couldn\'t find a road route</string>
+    <string name="directions">Directions</string>
+    <string name="route_travelling">Travelling</string>
+    <string name="route_swap">Swap start and end</string>
+    <string name="route_cancel">Cancel route</string>
+    <string name="route_details">Details</string>
+    <string name="route_b_placeholder">Tap the map to set B</string>
+    <string name="route_edit_hint">Tap a point to re-pick · Swap to flip start and end</string>
+    <string name="route_travelled">travelled</string>
+    <string name="route_arrival">to arrival</string>
+    <string name="route_locating">Locating…</string>
     <string name="play_route">Play route (GPX)</string>
     <string name="stop_route">Stop route</string>
     <string name="route_channel">Route playback</string>
