@@ -45,6 +45,13 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.github.jqssun.gpssetter.BuildConfig
 import io.github.jqssun.gpssetter.R
 import io.github.jqssun.gpssetter.adapter.FavListAdapter
+import android.widget.ArrayAdapter
+import android.widget.ImageView
+import android.widget.ListView
+import androidx.core.widget.doAfterTextChanged
+import com.google.android.material.materialswitch.MaterialSwitch
+import io.github.libxposed.service.HookedTarget
+import io.github.libxposed.service.XposedService
 import io.github.jqssun.gpssetter.adapter.RouteListAdapter
 import io.github.jqssun.gpssetter.room.Favorite
 import io.github.jqssun.gpssetter.room.SavedRoute
@@ -226,6 +233,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
             val id = item.itemId
             binding.screenSaved.root.isVisible = id == R.id.tab_saved
             binding.screenTargets.root.isVisible = id == R.id.tab_targets
+            if (id == R.id.tab_targets) refreshTargets()
             when (id) {
                 R.id.tab_teleport -> setRouteMode(false)
                 R.id.tab_routes -> setRouteMode(true)
@@ -442,6 +450,130 @@ abstract class BaseMapActivity: AppCompatActivity() {
             .setAnchorView(binding.bottomNav)
             .setAction(R.string.undo) { undo() }
             .show()
+    }
+
+    // ---- Targets tab: hooked processes and the module's scope, from the framework's service ----
+    private var scope: List<String> = emptyList()
+
+    private fun setupTargets() {
+        binding.screenTargets.scopeAdd.setOnClickListener { pickAppForScope() }
+        // the per-app switches depend on the system hook setting just below them
+        PrefManager.changed.observe(this) { if (binding.screenTargets.root.isVisible) renderScope() }
+    }
+
+    private fun refreshTargets() {
+        val service = PrefManager.service
+        if (service == null) {
+            scope = emptyList()
+            binding.screenTargets.moduleProcesses.isVisible = false
+            renderScope()
+            return
+        }
+        lifecycleScope.launch {
+            // binder calls; getRunningTargets needs service API 102 and throws on older frameworks
+            val (s, running) = withContext(Dispatchers.IO) {
+                runCatching { service.scope }.getOrDefault(emptyList()) to runCatching { service.runningTargets }.getOrNull()
+            }
+            scope = s
+            binding.screenTargets.moduleProcesses.isVisible = running != null
+            binding.screenTargets.moduleProcesses.text = running.orEmpty().joinToString("\n") {
+                getString(R.string.process_fmt, it.processName, it.pid, getString(when (it.state) {
+                    HookedTarget.State.UP_TO_DATE -> R.string.process_current
+                    HookedTarget.State.STALE -> R.string.process_stale // still running an older build of the module
+                    HookedTarget.State.RELOADING -> R.string.process_reloading
+                    else -> R.string.process_failed
+                }))
+            }.ifEmpty { getString(R.string.process_none) }
+            renderScope()
+        }
+    }
+
+    private fun renderScope() {
+        val t = binding.screenTargets
+        val systemHook = PrefManager.isSystemHooked
+        t.scopeHint.setText(when {
+            PrefManager.service == null -> R.string.error_xposed_module_missing_desc
+            systemHook -> R.string.scope_hint_system
+            else -> R.string.scope_hint_apps
+        })
+        t.scopeAdd.isEnabled = PrefManager.service != null
+        t.scopeList.removeAllViews()
+        val disabled = PrefManager.disabledApps
+        for (pkg in scope) {
+            val row = layoutInflater.inflate(R.layout.scope_item, t.scopeList, false)
+            val isSystem = pkg == "system" || pkg == "android"
+            val app = if (isSystem) null else runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull()
+            row.findViewById<TextView>(R.id.scope_label).text =
+                if (isSystem) getString(R.string.scope_system) else app?.loadLabel(packageManager) ?: pkg
+            row.findViewById<TextView>(R.id.scope_package).text = pkg
+            row.findViewById<ImageView>(R.id.scope_icon).setImageDrawable(
+                app?.loadIcon(packageManager) ?: getDrawable(if (isSystem) R.drawable.ic_advanced_hook else R.drawable.ic_place)
+            )
+            // with the system hook on, system_server spoofs every app, so a per-app switch can't help
+            row.findViewById<MaterialSwitch>(R.id.scope_spoof).apply {
+                isVisible = !isSystem && !systemHook
+                isChecked = pkg !in disabled
+                setOnCheckedChangeListener { _, on -> PrefManager.setAppSpoofed(pkg, on) }
+            }
+            row.findViewById<View>(R.id.scope_remove).setOnClickListener { confirmRemoveScope(pkg, row.findViewById<TextView>(R.id.scope_label).text) }
+            t.scopeList.addView(row)
+        }
+    }
+
+    private fun confirmRemoveScope(pkg: String, label: CharSequence) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.scope_remove_title, label))
+            .setMessage(R.string.scope_remove_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.scope_remove) { _, _ ->
+                val service = PrefManager.service ?: return@setPositiveButton
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { runCatching { service.removeScope(listOf(pkg)) } }
+                    refreshTargets()
+                }
+            }
+            .show()
+    }
+
+    // a launcher app, named the way the picker shows and filters it
+    private class PickableApp(val label: String, val pkg: String) {
+        override fun toString() = label
+    }
+
+    private fun pickAppForScope() {
+        val service = PrefManager.service ?: return
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = packageManager.queryIntentActivities(launcher, 0)
+            .map { it.activityInfo.applicationInfo }
+            .distinctBy { it.packageName }
+            .filter { it.packageName != packageName && it.packageName !in scope }
+            .map { PickableApp(it.loadLabel(packageManager).toString(), it.packageName) }
+            .sortedBy { it.label.lowercase() }
+        val view = layoutInflater.inflate(R.layout.dialog_pick_app, null)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, apps.toMutableList())
+        val list = view.findViewById<ListView>(R.id.app_list)
+        list.adapter = adapter
+        view.findViewById<EditText>(R.id.app_filter).doAfterTextChanged { adapter.filter.filter(it) }
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.scope_add_title)
+            .setView(view)
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+        list.setOnItemClickListener { _, _, position, _ ->
+            val app = adapter.getItem(position) ?: return@setOnItemClickListener
+            dialog.dismiss()
+            // the framework asks the user to approve; the answer comes back on a binder thread
+            service.requestScope(listOf(app.pkg), object : XposedService.OnScopeEventListener {
+                override fun onScopeRequestApproved(approved: List<String>) = runOnUiThread {
+                    showToast(getString(R.string.scope_added, app.label))
+                    refreshTargets()
+                }
+                override fun onScopeRequestFailed(message: String) = runOnUiThread {
+                    showToast(getString(R.string.scope_failed, message))
+                }
+            })
+            showToast(getString(R.string.scope_requested))
+        }
     }
 
     private fun showModuleStatus(active: Boolean) {
@@ -700,6 +832,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
         setupButtons()
         setupTabs()
         setupTeleport()
+        setupTargets()
         setupSaved()
         setupRouteMode()
         // observe once; registering inside the Add dialog stacked an observer (and a toast) per save
@@ -771,6 +904,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
     private fun checkModuleEnabled(){
         viewModel.isXposed.observe(this) { isXposed ->
             showModuleStatus(isXposed)
+            if (binding.screenTargets.root.isVisible) refreshTargets()
             xposedDialog?.dismiss()
             xposedDialog = null
             if (!isXposed) {

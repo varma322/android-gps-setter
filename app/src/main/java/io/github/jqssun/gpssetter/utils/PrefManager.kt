@@ -41,6 +41,7 @@ object PrefManager   {
     private const val ALTITUDE = "altitude_d" // Double bits
     private const val SPEED = "speed"         // m/s
     private const val BEARING = "bearing"     // degrees, -1 = unset (use the real fix's bearing)
+    private const val DISABLED_APPS = "disabled_apps" // scoped packages whose in-app hooks stand down
     private const val ROUTE_STATE = "route_state" // app-only, not mirrored: RoutePlaybackService.IDLE / RUNNING / PAUSED
     private const val ROUTE_ALONG = "route_along" // app-only: metres along the playing route
 
@@ -52,7 +53,9 @@ object PrefManager   {
     // the hook can't read app-private files, so the settings it needs are mirrored into
     // LSPosed's remote preferences (libxposed service) whenever they change
     @Volatile private var remote: SharedPreferences? = null
-    @Volatile private var service: XposedService? = null
+    // the framework's service while bound, for the Targets tab (scope, hooked processes)
+    @Volatile var service: XposedService? = null
+        private set
     private val fileWriter = Executors.newSingleThreadExecutor() // keeps writes in order, off the main thread
     val moduleActive = MutableLiveData<Boolean>()
     // e.g. "LSPosed 2.0.1 · API 102", for the Targets tab; set before moduleActive flips to true
@@ -109,6 +112,9 @@ object PrefManager   {
             .putLong(ALTITUDE, altitude.toRawBits())
             .putFloat(SPEED, speed)
             .putFloat(BEARING, bearing)
+            // a plain HashSet: the framework's process deserializes this and has no Kotlin classes
+            // (emptySet() is kotlin.collections.EmptySet, and the failed commit crashed the app)
+            .putStringSet(DISABLED_APPS, HashSet(disabledApps))
             .apply()
         writeRemoteFile(remote.all)
     }
@@ -159,6 +165,12 @@ object PrefManager   {
     }
 
     val routeAlong: Float get() = pref.getFloat(ROUTE_ALONG, 0f)
+
+    val disabledApps: Set<String> get() = pref.getStringSet(DISABLED_APPS, null)?.toSet() ?: emptySet()
+
+    fun setAppSpoofed(pkg: String, spoofed: Boolean) {
+        pref.edit().putStringSet(DISABLED_APPS, if (spoofed) disabledApps - pkg else disabledApps + pkg).apply()
+    }
 
 
     val isStarted : Boolean

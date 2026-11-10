@@ -31,6 +31,7 @@ object LocationHook {
     private lateinit var settings: Xshare
     @Volatile private var mLastUpdated: Long = 0
     @Volatile private var started = false
+    private var appPackage: String? = null // the scoped app this process belongs to; null in system_server
     private val ignorePkg = arrayListOf("com.android.location.fused", BuildConfig.APPLICATION_ID)
 
     // Cached provider managers (e.g. "gps", "fused", "network") for generating fake fixes in system_server
@@ -60,7 +61,8 @@ object LocationHook {
         try {
             mLastUpdated = System.currentTimeMillis()
             settings.refresh()
-            val now = settings.isStarted
+            // an app switched off on the Targets tab reads its real location (live; pushed to app processes)
+            val now = settings.isStarted && appPackage.let { it == null || it !in settings.disabledApps }
             if (now != started) module.log(Log.INFO, TAG, "Spoofing ${if (now) "on" else "off"}")
             started = now
             if (!started) return
@@ -385,6 +387,7 @@ object LocationHook {
     fun initAppHooks(xposed: XposedModule, packageName: String) {
         if (packageName in ignorePkg) return
         init(xposed)
+        appPackage = packageName
         val interval = 80 // 200
 
         for (method in Location::class.java.declaredMethods) {
