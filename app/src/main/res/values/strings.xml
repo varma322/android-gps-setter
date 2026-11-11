@@ -98,6 +98,7 @@
     <string name="route_undo">Remove the last stop</string>
     <string name="route_variation">Variation</string>
     <string name="route_heading">heading</string>
+    <string name="route_options">Speed, variation and mode; tap to change</string>
     <string name="route_pause">Pause</string>
     <string name="route_resume">Resume</string>
     <string name="route_paused">Paused</string>

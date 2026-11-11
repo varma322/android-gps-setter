@@ -617,11 +617,18 @@ abstract class BaseMapActivity: AppCompatActivity() {
         showVariation(b.variationSlider.value)
         b.variationSlider.addOnChangeListener { _, v, _ -> showVariation(v) }
         b.routeMode.addOnButtonCheckedListener { _, id, checked ->
-            if (checked) playMode = when (id) {
+            if (!checked) return@addOnButtonCheckedListener
+            playMode = when (id) {
                 R.id.mode_loop -> RouteMath.LOOP
                 R.id.mode_pingpong -> RouteMath.PING_PONG
                 else -> RouteMath.ONCE
             }
+            updateOptionsSummary()
+        }
+        b.routeOptionsBar.setOnClickListener {
+            val open = !b.routeOptions.isVisible
+            b.routeOptions.isVisible = open
+            b.routeOptionsChevron.rotation = if (open) 0f else 180f
         }
         b.routeStart.setOnClickListener { startRoutePlayback() }
         b.routeStop.setOnClickListener { stopRoutePlayback() }
@@ -654,7 +661,21 @@ abstract class BaseMapActivity: AppCompatActivity() {
     private fun showSetup() { binding.routeSetup.visibility = View.VISIBLE; binding.routeTravel.visibility = View.GONE }
     private fun showTravel() { binding.routeSetup.visibility = View.GONE; binding.routeTravel.visibility = View.VISIBLE }
 
-    private fun updateSpeedLabel() { binding.speedValue.text = getString(R.string.route_speed_fmt, speedKmh) }
+    private fun updateSpeedLabel() {
+        binding.speedValue.text = getString(R.string.route_speed_fmt, speedKmh)
+        updateOptionsSummary()
+    }
+
+    // the folded options line: "50 km/h ±12% · Loop"
+    private fun updateOptionsSummary() {
+        val v = binding.variationSlider.value.roundToInt()
+        val mode = getString(when (playMode) {
+            RouteMath.LOOP -> R.string.mode_loop
+            RouteMath.PING_PONG -> R.string.mode_pingpong
+            else -> R.string.mode_once
+        })
+        binding.routeOptionsSummary.text = getString(R.string.route_speed_fmt, speedKmh) + (if (v > 0) " ±$v%" else "") + " · " + mode
+    }
 
     private fun syncSpeedPreset() {
         val id = speedPresets.entries.firstOrNull { it.value == speedKmh }?.key
@@ -663,6 +684,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
 
     private fun showVariation(v: Float) {
         binding.variationValue.text = if (v == 0f) getString(R.string.jitter_off) else "±${v.roundToInt()}%"
+        updateOptionsSummary()
     }
 
     // Flavors call this from onMapClick; returns true when route mode consumed the tap.

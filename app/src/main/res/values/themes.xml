@@ -11,6 +11,8 @@
         <item name="android:overScrollMode">@integer/overscroll_enabled</item>
         <item name="actionOverflowMenuStyle">@style/GPSSetterOverflowMenu</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.GPSSetter.GlassDialog</item>
+        <!-- round thumb on a thin track, not 1.12's tall bar handle -->
+        <item name="sliderStyle">@style/Widget.Material3.Slider.Legacy</item>
 
     </style>
 
