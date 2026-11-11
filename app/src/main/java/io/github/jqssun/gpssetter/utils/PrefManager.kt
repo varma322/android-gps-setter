@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.provider.Settings
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.MutableLiveData
 import io.github.jqssun.gpssetter.BuildConfig
@@ -29,6 +30,8 @@ object PrefManager   {
     private const val DEF_LAT = 40.7128
     private const val DEF_LNG = -74.0060
     private const val HOOKED_SYSTEM = "system_hooked"
+    private const val HOOK_BOOT = "system_hooked_boot"       // the boot (Settings.Global.BOOT_COUNT) HOOK_AT_BOOT is for
+    private const val HOOK_AT_BOOT = "system_hooked_at_boot" // the system hook setting that boot started with
     private const val RANDOM_POSITION = "random_position" // legacy on/off (= 25 m); read only to migrate
     private const val JITTER = "jitter_m"                 // Float metres, 0 = exact point
     private const val ACCURACY_SETTING = "accuracy_level"
@@ -191,7 +194,22 @@ object PrefManager   {
 
     var isSystemHooked : Boolean
         get() = pref.getBoolean(HOOKED_SYSTEM, true) // must match Xshare.isHookedSystem default
-        set(value) { pref.edit().putBoolean(HOOKED_SYSTEM,value).apply() }
+        set(value) {
+            // system_server reads this once, as it starts: on the first change this boot, note what it started with
+            val boot = bootCount
+            val editor = pref.edit()
+            if (boot >= 0 && pref.getInt(HOOK_BOOT, -1) != boot) {
+                editor.putInt(HOOK_BOOT, boot).putBoolean(HOOK_AT_BOOT, isSystemHooked)
+            }
+            editor.putBoolean(HOOKED_SYSTEM, value).apply()
+        }
+
+    // the setting system_server is running with now; isSystemHooked only takes effect at the next reboot
+    val isSystemHookedThisBoot: Boolean
+        get() = systemHookedThisBoot(isSystemHooked, pref.getInt(HOOK_BOOT, -1), pref.getBoolean(HOOK_AT_BOOT, true), bootCount)
+
+    private val bootCount: Int
+        get() = Settings.Global.getInt(gsApp.contentResolver, Settings.Global.BOOT_COUNT, -1)
 
     var jitterMeters: Float
         get() = when {
@@ -247,3 +265,9 @@ object PrefManager   {
     }
 
 }
+
+// The system hook setting system_server is running with: [recordedValue] if it was recorded during
+// this boot (the setting changed since system_server started), else the [saved] setting. An unknown
+// boot count (-1) can't be matched, so it falls back to [saved].
+internal fun systemHookedThisBoot(saved: Boolean, recordedBoot: Int, recordedValue: Boolean, boot: Int): Boolean =
+    if (boot >= 0 && recordedBoot == boot) recordedValue else saved

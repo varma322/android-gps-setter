@@ -42,6 +42,8 @@
     <string name="scope_remove_message">The module stops loading into it. This takes effect when the app restarts (System framework: after a reboot).</string>
     <string name="scope_hint_system">The system hook spoofs every app. Apps added here also get in-app hooks, which catch locations an app reads by other means.</string>
     <string name="scope_hint_apps">The system hook is off, so only these apps are spoofed. Switch one off to give it your real location; that applies at once.</string>
+    <string name="scope_hint_reboot_off">You turned the system hook off. It stops at your next reboot and spoofs every app until then.</string>
+    <string name="scope_hint_reboot_on">You turned the system hook on. It starts spoofing every app at your next reboot.</string>
     <string name="scope_requested">Approve the request in the Xposed framework\'s prompt</string>
     <string name="scope_added">Added %s. Restart it to load the hooks.</string>
     <string name="scope_failed">Couldn\'t add the app: %s</string>

@@ -454,6 +454,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
 
     // ---- Targets tab: hooked processes and the module's scope, from the framework's service ----
     private var scope: List<String> = emptyList()
+    private var running: List<HookedTarget>? = null // null = unknown (framework older than API 102)
 
     private fun setupTargets() {
         binding.screenTargets.scopeAdd.setOnClickListener { pickAppForScope() }
@@ -471,12 +472,13 @@ abstract class BaseMapActivity: AppCompatActivity() {
         }
         lifecycleScope.launch {
             // binder calls; getRunningTargets needs service API 102 and throws on older frameworks
-            val (s, running) = withContext(Dispatchers.IO) {
+            val (s, procs) = withContext(Dispatchers.IO) {
                 runCatching { service.scope }.getOrDefault(emptyList()) to runCatching { service.runningTargets }.getOrNull()
             }
             scope = s
-            binding.screenTargets.moduleProcesses.isVisible = running != null
-            binding.screenTargets.moduleProcesses.text = running.orEmpty().joinToString("\n") {
+            running = procs
+            binding.screenTargets.moduleProcesses.isVisible = procs != null
+            binding.screenTargets.moduleProcesses.text = procs.orEmpty().joinToString("\n") {
                 getString(R.string.process_fmt, it.processName, it.pid, getString(when (it.state) {
                     HookedTarget.State.UP_TO_DATE -> R.string.process_current
                     HookedTarget.State.STALE -> R.string.process_stale // still running an older build of the module
@@ -488,14 +490,23 @@ abstract class BaseMapActivity: AppCompatActivity() {
         }
     }
 
+    // Whether system_server is feeding every app the fake location right now: the module is loaded
+    // there (exact from the running processes, else from the scope) and this boot started with the
+    // system hook on. Changing the setting only takes effect at the next reboot.
+    private fun systemWideNow(): Boolean {
+        val loaded = running?.any { it.processName == "system" } ?: scope.any { it == "system" || it == "android" }
+        return loaded && PrefManager.isSystemHookedThisBoot
+    }
+
     private fun renderScope() {
         val t = binding.screenTargets
-        val systemHook = PrefManager.isSystemHooked
-        t.scopeHint.setText(when {
-            PrefManager.service == null -> R.string.error_xposed_module_missing_desc
-            systemHook -> R.string.scope_hint_system
-            else -> R.string.scope_hint_apps
-        })
+        val systemWide = systemWideNow()
+        val rebootPending = PrefManager.isSystemHooked != PrefManager.isSystemHookedThisBoot
+        t.scopeHint.text = if (PrefManager.service == null) getString(R.string.error_xposed_module_missing_desc) else
+            getString(if (systemWide) R.string.scope_hint_system else R.string.scope_hint_apps) +
+                if (rebootPending) "\n" + getString(
+                    if (PrefManager.isSystemHooked) R.string.scope_hint_reboot_on else R.string.scope_hint_reboot_off
+                ) else ""
         t.scopeAdd.isEnabled = PrefManager.service != null
         t.scopeList.removeAllViews()
         val disabled = PrefManager.disabledApps
@@ -509,9 +520,9 @@ abstract class BaseMapActivity: AppCompatActivity() {
             row.findViewById<ImageView>(R.id.scope_icon).setImageDrawable(
                 app?.loadIcon(packageManager) ?: getDrawable(if (isSystem) R.drawable.ic_advanced_hook else R.drawable.ic_place)
             )
-            // with the system hook on, system_server spoofs every app, so a per-app switch can't help
+            // while system_server spoofs every app, a per-app switch can't give one its real location
             row.findViewById<MaterialSwitch>(R.id.scope_spoof).apply {
-                isVisible = !isSystem && !systemHook
+                isVisible = !isSystem && !systemWide
                 isChecked = pkg !in disabled
                 setOnCheckedChangeListener { _, on -> PrefManager.setAppSpoofed(pkg, on) }
             }
