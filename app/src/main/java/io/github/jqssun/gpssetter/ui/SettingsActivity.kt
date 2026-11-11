@@ -192,6 +192,12 @@ class ActivitySettings : AppCompatActivity() {
     // Hook settings; hosted on the map screen's Targets tab, not in this activity.
     class XposedPreferenceFragment : PreferenceFragmentCompat() {
 
+        // the tab scrolls as a whole; this list is two rows long
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            listView.isNestedScrollingEnabled = false
+        }
+
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             preferenceManager?.preferenceDataStore = SettingPreferenceDataStore()
             setPreferencesFromResource(R.xml.xposed_preferences, rootKey)
