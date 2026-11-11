@@ -115,7 +115,8 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, MapLibreMap.OnMapClick
             2 -> rasterStyle(ESRI_ATTRIBUTION, 19, ESRI_IMAGERY)
             3 -> rasterStyle(OPEN_TOPO_ATTRIBUTION, 17, OPEN_TOPO)
             4 -> rasterStyle(ESRI_ATTRIBUTION, 19, ESRI_IMAGERY, ESRI_ROADS, ESRI_PLACES)
-            else -> Style.Builder().fromUri("https://tiles.openfreemap.org/styles/" + if (isNight) "dark" else "liberty")
+            // fiord, not "dark": that one is near-black (roads #181818 on #0c0c0c) and unreadable below full brightness
+            else -> Style.Builder().fromUri("https://tiles.openfreemap.org/styles/" + if (isNight) "fiord" else "liberty")
         }
         mMap.setStyle(builder) { style ->
             // the location puck carries over to a new style; only set it up (or ask for permission) once
