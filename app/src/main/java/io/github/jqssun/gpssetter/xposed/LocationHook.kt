@@ -1,12 +1,16 @@
 package io.github.jqssun.gpssetter.xposed
 
+import android.content.Context
+import android.content.Intent
 import android.location.Location
 import android.location.LocationManager
 import android.location.LocationRequest
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.os.UserHandle
 import android.util.Log
+import android.util.SparseArray
 import io.github.jqssun.gpssetter.BuildConfig
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModule
@@ -39,6 +43,9 @@ object LocationHook {
     @Volatile private var generatorStarted = false
     @Volatile private var lastGpsReportTime: Long = 0
     private var locationResultWrap: Method? = null
+    @Volatile private var emergencyField: Field? = null // LocationProviderManager.mEmergencyHelper, Android 14+
+    @Volatile private var locationToggledAt = Long.MIN_VALUE / 2 // elapsedRealtime of our last off/on switch
+    private const val GMS_LOCATION_OFF_WARNING = "com.google.android.gms.location.settings.LocationOffWarningActivity"
 
     // system = true also re-reads the settings from a remote file, because the framework may not
     // push preference changes into system_server (see Xshare)
@@ -64,6 +71,8 @@ object LocationHook {
             // an app switched off on the Targets tab reads its real location (live; pushed to app processes)
             val now = settings.isStarted && appPackage.let { it == null || it !in settings.disabledApps }
             if (now != started) module.log(Log.INFO, TAG, "Spoofing ${if (now) "on" else "off"}")
+            // own thread: this can run inside a provider's locked onReportLocation, and cleanStop takes those locks
+            if (started && !now && appPackage == null) Thread(::cleanStop, "GpsSetter-CleanStop").start()
             started = now
             if (!started) return
             // ponytail: a fresh offset on every settings read (~5 Hz system, ~12 Hz in apps), so fixes hop
@@ -80,6 +89,71 @@ object LocationHook {
         } catch (e: Exception) {
             module.log(Log.ERROR, TAG, "Failed to read settings", e)
         }
+    }
+
+    // After a stop, the last fake fix lingers as the "last known location" in Android and in Play services, whose
+    // fused engine keeps re-reporting it and ignores a lone real fix far away. So clear Android's cache, then switch
+    // Location off and on, which clears Play services' cache (as Google documents); the next app to ask gets a real fix.
+    private fun cleanStop() {
+        if (providerManagers.isEmpty()) return // only system_server on Android 12+ feeds fakes into the cache
+        try {
+            Thread.sleep(500) // let a fake the generator is already delivering land first (it ticks every 250 ms)
+            // never touch location while an emergency call/SMS is using it
+            if (providerManagers.values.any { inEmergency(emergencyField?.get(it)) }) return
+            // the switch below clears these too, except the bypass copies kept for emergency services
+            var cleared = 0
+            for (manager in providerManagers.values) if (clearLastLocations(manager)) cleared++
+            module.log(Log.INFO, TAG, "Stopped: cleared the last location of $cleared providers")
+            val thread = Class.forName("android.app.ActivityThread")
+            val context = thread.getMethod("getSystemContext").invoke(thread.getMethod("currentActivityThread").invoke(null)) as Context
+            toggleLocation(context.getSystemService(LocationManager::class.java))
+        } catch (t: Throwable) {
+            module.log(Log.WARN, TAG, "Clean stop failed", t)
+        }
+    }
+
+    // only if it's on; always switched back on, even if the wait is interrupted
+    private fun toggleLocation(lm: LocationManager) {
+        val userId = Class.forName("android.app.ActivityManager").getMethod("getCurrentUser").invoke(null) as Int
+        val user = UserHandle::class.java.getMethod("of", Int::class.javaPrimitiveType).invoke(null, userId)
+        val isOn = LocationManager::class.java.getMethod("isLocationEnabledForUser", UserHandle::class.java)
+        if (isOn.invoke(lm, user) != true) return
+        val set = LocationManager::class.java.getMethod("setLocationEnabledForUser", Boolean::class.javaPrimitiveType, UserHandle::class.java)
+        locationToggledAt = SystemClock.elapsedRealtime()
+        set.invoke(lm, false, user)
+        try {
+            Thread.sleep(2000) // shorter risks Play services missing the off state; 2 s was tested
+        } finally {
+            set.invoke(lm, true, user)
+        }
+        module.log(Log.INFO, TAG, "Stopped: switched Location off and on")
+    }
+
+    // LocationProviderManager.mLastLocations: per user, a LastLocation holding fine/coarse (+ bypass) fixes
+    private fun clearLastLocations(manager: Any): Boolean {
+        val lastLocations = field(manager.javaClass, "mLastLocations") ?: return false
+        // mMultiplexerLock from Android 13, mLock on 12
+        val lock = (field(manager.javaClass, "mMultiplexerLock") ?: field(manager.javaClass, "mLock"))?.get(manager) ?: manager
+        synchronized(lock) {
+            val perUser = lastLocations.get(manager) as? SparseArray<*> ?: return false
+            for (i in 0 until perUser.size()) {
+                val last = perUser.valueAt(i) ?: continue
+                for (f in last.javaClass.declaredFields) if (f.type == Location::class.java) {
+                    f.isAccessible = true
+                    f.set(last, null)
+                }
+            }
+        }
+        return true
+    }
+
+    private fun field(cls: Class<*>, name: String): Field? {
+        var c: Class<*>? = cls
+        while (c != null) {
+            try { return c.getDeclaredField(name).apply { isAccessible = true } } catch (_: NoSuchFieldException) {}
+            c = c.superclass
+        }
+        return null
     }
 
     // the spoofed fix; keeps timing/bearing from the real one when there is one
@@ -332,6 +406,7 @@ object LocationHook {
                 val getName = lpm.getMethod("getName")
                 // Android 14+ only; on 12/13 there is no emergency state here to check
                 val emergency = try { lpm.getDeclaredField("mEmergencyHelper").apply { isAccessible = true } } catch (e: NoSuchFieldException) { null }
+                emergencyField = emergency
 
                 safely("onReportLocation") {
                     module.hook(lpm.getDeclaredMethod("onReportLocation", result)).intercept { chain ->
@@ -372,6 +447,24 @@ object LocationHook {
                 }
 
                 startFixGenerator(classLoader, lms, lpm, emergency)
+
+                // Play services opens a "No location access" warning whenever Location goes off, including
+                // cleanStop's 2 s off/on switch; drop just that one start for a few seconds after our switch
+                safely("startActivity") {
+                    val atms = classLoader.loadClass("com.android.server.wm.ActivityTaskManagerService")
+                    for (m in atms.declaredMethods) {
+                        val i = m.parameterTypes.indexOf(Intent::class.java)
+                        if (m.name != "startActivity" || m.returnType != Int::class.javaPrimitiveType || i < 0) continue
+                        module.hook(m).intercept { chain ->
+                            // every activity start passes here: a failed check must never block one
+                            val ours = runCatching {
+                                SystemClock.elapsedRealtime() - locationToggledAt < 10_000 &&
+                                    (chain.getArg(i) as? Intent)?.component?.className == GMS_LOCATION_OFF_WARNING
+                            }.getOrDefault(false)
+                            if (ours) 0 /* ActivityManager.START_SUCCESS */ else chain.proceed()
+                        }
+                    }
+                }
             }
         }
     }
