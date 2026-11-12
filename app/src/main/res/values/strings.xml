@@ -54,6 +54,9 @@
     <string name="process_failed">failed to load</string>
     <string name="process_none">Not loaded in any process yet</string>
     <string name="start_mock">Teleport here</string>
+    <string name="location_off_title">Location is off</string>
+    <string name="location_off_message">Teleport and routes need Location on. While it\'s off, Android gives no app a location, real or fake.</string>
+    <string name="turn_on_location">Turn on</string>
     <string name="move_here">Move here</string>
     <string name="spoof_live">Live · accuracy %s m</string>
     <string name="spoof_idle">Idle · accuracy %s m</string>
