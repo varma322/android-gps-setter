@@ -30,6 +30,7 @@ import io.github.jqssun.gpssetter.room.SavedRouteDao
 import io.github.jqssun.gpssetter.route.RouteMath
 import io.github.jqssun.gpssetter.route.RoutePoint
 import io.github.jqssun.gpssetter.route.parseGpx
+import io.github.jqssun.gpssetter.route.GpxStop
 import io.github.jqssun.gpssetter.route.toGpx
 import io.github.jqssun.gpssetter.update.UpdateChecker
 import io.github.jqssun.gpssetter.utils.PrefManager
@@ -118,8 +119,8 @@ class MainViewModel @Inject constructor(
         .map { routes -> routes.map { RouteCard(it, RouteMath.sketch(parseGpx(it.gpx))) } }
         .flowOn(Dispatchers.Default)
 
-    fun saveRoute(name: String, points: List<RoutePoint>) = onIO {
-        savedRouteDao.insert(SavedRoute(name = name, gpx = toGpx(name, points), meters = RouteMath.pathLength(points)))
+    fun saveRoute(name: String, points: List<RoutePoint>, stops: List<GpxStop> = emptyList()) = onIO {
+        savedRouteDao.insert(SavedRoute(name = name, gpx = toGpx(name, points, stops), meters = RouteMath.pathLength(points)))
     }
 
     fun deleteRoute(route: SavedRoute) = onIO { savedRouteDao.delete(route) }

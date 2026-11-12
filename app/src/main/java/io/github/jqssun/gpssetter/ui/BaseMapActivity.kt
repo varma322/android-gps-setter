@@ -55,7 +55,9 @@ import io.github.libxposed.service.XposedService
 import io.github.jqssun.gpssetter.adapter.RouteListAdapter
 import io.github.jqssun.gpssetter.room.Favorite
 import io.github.jqssun.gpssetter.room.SavedRoute
+import io.github.jqssun.gpssetter.route.GpxStop
 import io.github.jqssun.gpssetter.route.gpxName
+import io.github.jqssun.gpssetter.route.gpxStops
 import io.github.jqssun.gpssetter.route.lineFromGeoJson
 import io.github.jqssun.gpssetter.route.nameFromGeoJson
 import android.provider.OpenableColumns
@@ -160,7 +162,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
                     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 }
                 val route = text?.let { parseGpx(it) }.orEmpty()
-                if (route.size < 2) showToast(getString(R.string.route_empty)) else loadGpx(route)
+                if (route.size < 2) showToast(getString(R.string.route_empty)) else loadGpx(route, gpxStops(text!!))
             }
         }
 
@@ -178,13 +180,28 @@ abstract class BaseMapActivity: AppCompatActivity() {
     // Applies the Settings "Map" type (PrefManager.mapType); no-op until the map is ready. Called from onMapReady and onResume (#12).
     protected abstract fun applyMapType()
 
-    // Route overlay (flavor-specific map): polyline + A/B markers, and a moving traveler dot.
-    protected abstract fun drawRoute(points: List<Pair<Double, Double>>)
+    // Route overlay (flavor-specific map): polyline + A/B markers, numbered [via] stop markers, and a moving traveler dot.
+    protected abstract fun drawRoute(points: List<Pair<Double, Double>>, via: List<Pair<Double, Double>>)
     protected abstract fun clearRoute()
     protected abstract fun setTraveler(lat: Double, lng: Double)
 
-    // A circular marker bitmap (filled dot with a white ring) for A/B/traveler markers.
-    protected fun dotBitmap(color: Int): android.graphics.Bitmap {
+    protected val viaStopColor = 0xFFF6B73C.toInt() // amber, apart from A's green and B's red
+
+    // South-west and north-east corners to fit the camera to, so a route and its markers show clear of the
+    // search bar, the bottom panel and the map buttons on the right
+    protected fun framedCorners(points: List<Pair<Double, Double>>): Pair<Pair<Double, Double>, Pair<Double, Double>> {
+        val lats = points.map { it.first }
+        val lngs = points.map { it.second }
+        val h = binding.mapArea.height.toDouble()
+        val w = binding.mapArea.width.toDouble()
+        if (h <= 0 || w <= 0) return (lats.min() to lngs.min()) to (lats.max() to lngs.max())
+        val (south, north) = RouteMath.stretchForOverlays(lats.min(), lats.max(), (h - binding.bottomPanels.top) / h, binding.topBar.bottom / h)
+        val (west, east) = RouteMath.stretchForOverlays(lngs.min(), lngs.max(), 0.0, (w - binding.getlocation.left) / w)
+        return (south to west) to (north to east)
+    }
+
+    // A circular marker bitmap (filled dot with a white ring) for A/B/traveler markers; [label] numbers a via stop.
+    protected fun dotBitmap(color: Int, label: String? = null): android.graphics.Bitmap {
         val d = resources.displayMetrics.density
         val size = (20 * d).toInt()
         val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
@@ -198,6 +215,14 @@ abstract class BaseMapActivity: AppCompatActivity() {
         p.style = android.graphics.Paint.Style.STROKE
         p.strokeWidth = ring
         canvas.drawCircle(r, r, r - ring, p)
+        if (label != null) {
+            p.style = android.graphics.Paint.Style.FILL
+            p.color = 0xFF1F1500.toInt() // dark on amber reads better than white
+            p.textSize = 11f * d
+            p.textAlign = android.graphics.Paint.Align.CENTER
+            p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            canvas.drawText(label, r, r - (p.descent() + p.ascent()) / 2, p)
+        }
         return bmp
     }
 
@@ -412,10 +437,10 @@ abstract class BaseMapActivity: AppCompatActivity() {
 
     private fun openSavedRoute(route: SavedRoute) {
         lifecycleScope.launch {
-            val points = withContext(Dispatchers.Default) { parseGpx(route.gpx) }
+            val (points, saved) = withContext(Dispatchers.Default) { parseGpx(route.gpx) to gpxStops(route.gpx) }
             if (points.size < 2) { showToast(getString(R.string.route_empty)); return@launch }
             binding.bottomNav.selectedItemId = R.id.tab_routes
-            loadGpx(points)
+            loadGpx(points, saved)
         }
     }
 
@@ -425,16 +450,17 @@ abstract class BaseMapActivity: AppCompatActivity() {
         val t = text.trim()
         when {
             t.startsWith("[") -> viewModel.importFavorites(t)
-            t.contains("<gpx") || t.contains("<trkpt") || t.contains("<rtept") -> saveImported(parseGpx(t), gpxName(t) ?: fileName)
+            t.contains("<gpx") || t.contains("<trkpt") || t.contains("<rtept") -> saveImported(parseGpx(t), gpxName(t) ?: fileName, gpxStops(t))
             t.startsWith("{") -> saveImported(lineFromGeoJson(t), nameFromGeoJson(t) ?: fileName)
             else -> showToast(getString(R.string.import_unknown))
         }
     }
 
-    private fun saveImported(points: List<RoutePoint>, name: String?) {
+    // [stops]: a route this app exported keeps its stops when it comes back in
+    private fun saveImported(points: List<RoutePoint>, name: String?, stops: List<GpxStop> = emptyList()) {
         if (points.size < 2) { showToast(getString(R.string.route_empty)); return }
         val title = name?.substringBeforeLast('.')?.takeIf { it.isNotBlank() } ?: getString(R.string.imported_route)
-        viewModel.saveRoute(title, points)
+        viewModel.saveRoute(title, points, stops)
         showToast(getString(R.string.route_saved_fmt, title))
         if (savedFilter == R.id.filter_spots) binding.screenSaved.savedFilter.check(R.id.filter_all) // so it shows up
     }
@@ -611,12 +637,13 @@ abstract class BaseMapActivity: AppCompatActivity() {
             if (fromUser) syncSpeedPreset()
             updateSpeedLabel()
             updateSummary()
+            steerRunningRoute()
         }
         b.speedPresets.setOnCheckedStateChangeListener { _, ids ->
             speedPresets[ids.firstOrNull()]?.let { b.speedSlider.value = it.toFloat() }
         }
         showVariation(b.variationSlider.value)
-        b.variationSlider.addOnChangeListener { _, v, _ -> showVariation(v) }
+        b.variationSlider.addOnChangeListener { _, v, _ -> showVariation(v); steerRunningRoute() }
         b.routeMode.addOnButtonCheckedListener { _, id, checked ->
             if (!checked) return@addOnButtonCheckedListener
             playMode = when (id) {
@@ -641,7 +668,9 @@ abstract class BaseMapActivity: AppCompatActivity() {
             val road = roadPoints
             if (road == null) { showToast(getString(R.string.route_nothing_to_save)); return@setOnClickListener }
             val name = if (stopNames.size >= 2) "${stopNames.first()} → ${stopNames.last()}" else getString(R.string.imported_route)
-            viewModel.saveRoute(name, road)
+            // the stops go in too, so opening the route brings them back; a name still being looked up isn't kept
+            val locating = getString(R.string.route_locating)
+            viewModel.saveRoute(name, road, stops.indices.map { GpxStop(stops[it], stopNames[it].takeIf { n -> n != locating }) })
             showToast(getString(R.string.route_saved_fmt, name))
         }
         b.routeSwap.setOnClickListener {
@@ -659,8 +688,26 @@ abstract class BaseMapActivity: AppCompatActivity() {
         renderStops()
     }
 
-    private fun showSetup() { binding.routeSetup.visibility = View.VISIBLE; binding.routeTravel.visibility = View.GONE }
-    private fun showTravel() { binding.routeSetup.visibility = View.GONE; binding.routeTravel.visibility = View.VISIBLE }
+    private fun showSetup() = showTravelling(false)
+    private fun showTravel() = showTravelling(true)
+
+    // the speed / variation / mode line stays in both states; the mode is fixed once a route runs
+    private fun showTravelling(on: Boolean) {
+        val b = binding
+        b.routeSetup.isVisible = !on
+        b.routeSetupTail.isVisible = !on
+        b.routeTravel.isVisible = on
+        b.routeTravelButtons.isVisible = on
+        b.routeMode.isVisible = !on
+    }
+
+    // While a route plays, the speed and variation controls steer it. Debounced, so a drag sends one update.
+    private val pushSpeed = Runnable { RoutePlaybackService.setSpeed(this, speedKmh / 3.6f, binding.variationSlider.value / 100f) }
+    private fun steerRunningRoute() {
+        if (!binding.routeTravel.isVisible) return
+        travelerHandler.removeCallbacks(pushSpeed)
+        travelerHandler.postDelayed(pushSpeed, 150)
+    }
 
     private fun updateSpeedLabel() {
         binding.speedValue.text = getString(R.string.route_speed_fmt, speedKmh)
@@ -746,7 +793,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
         roadPoints = road
         totalMeters = RouteMath.pathLength(road)
         stopDistances = via.drop(1).map { RouteMath.distanceAlong(road, it.lat, it.lng) }.toDoubleArray()
-        drawRoute(road.map { it.lat to it.lng })
+        drawRoute(road.map { it.lat to it.lng }, via.drop(1).dropLast(1).map { it.lat to it.lng })
         binding.routeSummaryTv.visibility = View.VISIBLE
         updateSummary()
         binding.routeStart.isEnabled = true
@@ -770,21 +817,23 @@ abstract class BaseMapActivity: AppCompatActivity() {
         routeStops()
     }
 
-    // a GPX track replaces the stops: its own geometry (and altitudes), A and B at its ends
-    private fun loadGpx(track: List<RoutePoint>) {
+    // A GPX track replaces the stops: its own geometry (and altitudes), and its [saved] stops if it has
+    // them (routes saved here keep theirs), else A and B at its ends. Stops without a name get looked up.
+    private fun loadGpx(track: List<RoutePoint>, saved: List<GpxStop> = emptyList()) {
         resetRoute()
-        val ends = listOf(track.first(), track.last())
-        stops += ends
-        stopNames += ends.map { getString(R.string.route_locating) }
+        val named = if (saved.size >= 2) saved else listOf(GpxStop(track.first(), null), GpxStop(track.last(), null))
+        stops += named.map { it.point }
+        stopNames += named.map { it.name ?: getString(R.string.route_locating) }
         renderStops()
-        ends.forEach { p ->
+        named.filter { it.name == null }.forEach { s ->
+            val p = s.point
             lifecycleScope.launch {
                 val name = shortAddress(p.lat, p.lng)
                 val i = stops.indexOfFirst { it === p }
                 if (i >= 0) { stopNames[i] = name; renderStops() }
             }
         }
-        setRoad(track, ends)
+        setRoad(track, stops.toList())
     }
 
     private fun startRoutePlayback() {

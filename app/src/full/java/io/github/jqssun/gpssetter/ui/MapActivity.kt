@@ -134,16 +134,21 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, GoogleMap.OnMapClickLi
     private var routeLine: Polyline? = null
     private var aMarker: Marker? = null
     private var bMarker: Marker? = null
+    private var viaMarkers: List<Marker?> = emptyList()
     private var travelerMarker: Marker? = null
 
-    override fun drawRoute(points: List<Pair<Double, Double>>) {
+    override fun drawRoute(points: List<Pair<Double, Double>>, via: List<Pair<Double, Double>>) {
         clearRoute()
         if (points.size < 2) return
         val lls = points.map { LatLng(it.first, it.second) }
         routeLine = mMap.addPolyline(PolylineOptions().addAll(lls).color(Accent.current().color).width(10f))
         aMarker = mMap.addMarker(MarkerOptions().position(lls.first()).icon(BitmapDescriptorFactory.fromBitmap(dotBitmap(0xFF22C55E.toInt()))))
         bMarker = mMap.addMarker(MarkerOptions().position(lls.last()).icon(BitmapDescriptorFactory.fromBitmap(dotBitmap(0xFFEF4444.toInt()))))
-        val bounds = LatLngBounds.Builder().apply { lls.forEach { include(it) } }.build()
+        viaMarkers = via.mapIndexed { i, v ->
+            mMap.addMarker(MarkerOptions().position(LatLng(v.first, v.second)).icon(BitmapDescriptorFactory.fromBitmap(dotBitmap(viaStopColor, "${i + 1}"))))
+        }
+        val (sw, ne) = framedCorners(points)
+        val bounds = LatLngBounds.Builder().include(LatLng(sw.first, sw.second)).include(LatLng(ne.first, ne.second)).build()
         mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 120))
     }
 
@@ -151,6 +156,7 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, GoogleMap.OnMapClickLi
         routeLine?.remove(); routeLine = null
         aMarker?.remove(); aMarker = null
         bMarker?.remove(); bMarker = null
+        viaMarkers.forEach { it?.remove() }; viaMarkers = emptyList()
         travelerMarker?.remove(); travelerMarker = null
     }
 
