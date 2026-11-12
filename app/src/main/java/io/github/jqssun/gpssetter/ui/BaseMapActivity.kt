@@ -788,6 +788,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
 
     private fun startRoutePlayback() {
         val road = roadPoints ?: return
+        if (!locationOnOrAsk()) return
         RoutePlaybackService.start(this, road, speedKmh / 3.6f, binding.variationSlider.value / 100f, playMode, stopDistances)
         binding.travelDetails.text = stopNames.withIndex().joinToString("\n") { (i, n) -> "${'A' + i}  $n" }
         showTravel()
@@ -1097,7 +1098,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
     protected fun getLastLocation() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         if (checkPermissions()) {
-            if (isLocationEnabled()) {
+            if (locationOnOrAsk()) {
                 fusedLocationClient.lastLocation.addOnCompleteListener(this) { task ->
                     val location: Location? = task.result
                     if (location == null) {
@@ -1108,10 +1109,6 @@ abstract class BaseMapActivity: AppCompatActivity() {
                         moveMapToNewLocation(true)
                     }
                 }
-            } else {
-                showToast("Turn on location")
-                val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                startActivity(intent)
             }
         } else {
             requestPermissions()
@@ -1139,6 +1136,19 @@ abstract class BaseMapActivity: AppCompatActivity() {
             lat = mLastLocation.latitude
             lon = mLastLocation.longitude
         }
+    }
+
+    // Teleport and routes need Location on: while it's off Android gives no app a location, real or fake.
+    // Returns false after asking.
+    protected fun locationOnOrAsk(): Boolean {
+        if (isLocationEnabled()) return true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.location_off_title)
+            .setMessage(R.string.location_off_message)
+            .setPositiveButton(R.string.turn_on_location) { _, _ -> startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+        return false
     }
 
     private fun isLocationEnabled(): Boolean {

@@ -179,6 +179,7 @@ class MapActivity: BaseMapActivity(), OnMapReadyCallback, GoogleMap.OnMapClickLi
 
         // which of the two shows (and the "Move here" label) is BaseMapActivity.renderTeleport's job
         binding.startButton.setOnClickListener {
+            if (!locationOnOrAsk()) return@setOnClickListener
             viewModel.update(true, lat, lon)
             lifecycleScope.launch {
                 LatLng(lat, lon).getAddress(getActivityInstance()).collect { showStartNotification(it) }
