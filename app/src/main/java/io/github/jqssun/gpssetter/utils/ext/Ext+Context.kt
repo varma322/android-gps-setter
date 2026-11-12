@@ -2,9 +2,11 @@ package io.github.jqssun.gpssetter.utils.ext
 
 
 import android.content.Context
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.widget.Toast
+import androidx.core.location.LocationManagerCompat
 
 
 
@@ -12,6 +14,10 @@ import android.widget.Toast
 fun Context.showToast(msg : String){
     Toast.makeText(this,msg, Toast.LENGTH_LONG).show()
 }
+
+// the Location master switch; while it's off Android gives no app a location, real or fake
+fun Context.isLocationOn(): Boolean =
+    LocationManagerCompat.isLocationEnabled(getSystemService(LocationManager::class.java))
 
 fun Context.isNetworkConnected(): Boolean {
     val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

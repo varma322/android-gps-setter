@@ -72,6 +72,7 @@ import io.github.jqssun.gpssetter.databinding.ActivityMapBinding
 import io.github.jqssun.gpssetter.ui.viewmodel.MainViewModel
 import io.github.jqssun.gpssetter.utils.JoystickService
 import io.github.jqssun.gpssetter.utils.NotificationsChannel
+import io.github.jqssun.gpssetter.utils.EXTRA_ASK_LOCATION
 import io.github.jqssun.gpssetter.utils.PrefManager
 import io.github.jqssun.gpssetter.utils.StopSpoofReceiver
 import io.github.jqssun.gpssetter.utils.applyAccent
@@ -869,6 +870,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
         setupTargets()
         setupSaved()
         setupRouteMode()
+        if (savedInstanceState == null) askIfFromTile(intent) // not again when the activity is recreated
         // observe once; registering inside the Add dialog stacked an observer (and a toast) per save
         viewModel.response.observe(this) {
             showToast(getString(if (it == (-1).toLong()) R.string.cant_save else R.string.save))
@@ -1141,7 +1143,7 @@ abstract class BaseMapActivity: AppCompatActivity() {
     // Teleport and routes need Location on: while it's off Android gives no app a location, real or fake.
     // Returns false after asking.
     protected fun locationOnOrAsk(): Boolean {
-        if (isLocationEnabled()) return true
+        if (isLocationOn()) return true
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.location_off_title)
             .setMessage(R.string.location_off_message)
@@ -1151,11 +1153,14 @@ abstract class BaseMapActivity: AppCompatActivity() {
         return false
     }
 
-    private fun isLocationEnabled(): Boolean {
-        val locationManager: LocationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(
-            LocationManager.NETWORK_PROVIDER
-        )
+    // a tile tapped with Location off opens the app with this extra (see openAppToTurnOnLocation)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        askIfFromTile(intent)
+    }
+
+    private fun askIfFromTile(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_ASK_LOCATION, false) == true) locationOnOrAsk()
     }
 
     private fun checkPermissions(): Boolean {
