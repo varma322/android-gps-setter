@@ -135,4 +135,18 @@ class RouteMathTest {
         assertEquals("000° N", RouteMath.compass(359.6f))
         assertNull(RouteMath.compass(-1f))
     }
+
+    @Test fun routeIsFramedBetweenTheOverlays() {
+        // top 10% and bottom 40% covered: the route must fill exactly the free 50% between them
+        val (s, n) = RouteMath.stretchForOverlays(0.0, 1.0, lowCovered = 0.4, highCovered = 0.1)
+        assertEquals(-0.8, s, 1e-9)
+        assertEquals(1.2, n, 1e-9)
+        assertEquals(0.1, (n - 1.0) / (n - s), 1e-9) // the route's north edge sits right under the top overlay
+        assertEquals(0.4, (0.0 - s) / (n - s), 1e-9) // and its south edge right above the bottom one
+        // nothing covered: unchanged
+        assertEquals(0.0 to 1.0, RouteMath.stretchForOverlays(0.0, 1.0, 0.0, 0.0))
+        // overlays covering nearly everything stretch at most 5x
+        val (s2, n2) = RouteMath.stretchForOverlays(0.0, 1.0, 0.5, 0.5)
+        assertEquals(5.0, n2 - s2, 1e-9)
+    }
 }

@@ -6,28 +6,54 @@ private val POINT = Regex("""<(trkpt|rtept|wpt)\b([^>]*?)(?:/>|>(.*?)</\1>)""", 
 private val LAT = Regex("""lat\s*=\s*["']([^"']+)["']""")
 private val LON = Regex("""lon\s*=\s*["']([^"']+)["']""")
 private val ELE = Regex("""<ele>\s*([^<]+)</ele>""")
+private val NAME = Regex("""<name>\s*([^<]*?)\s*</name>""")
+// a route stop that toGpx wrote: a <wpt> typed "stop", kept apart from the track
+private val STOP_TYPE = Regex("""<type>\s*stop\s*</type>""")
 
+// A stop of a saved route (A, via stops, destination) and the name it was shown with.
+data class GpxStop(val point: RoutePoint, val name: String?)
+
+private fun MatchResult.isStop() = groupValues[1] == "wpt" && STOP_TYPE.containsMatchIn(groupValues[3])
+
+private fun MatchResult.point(): RoutePoint? {
+    val attrs = groupValues[2]
+    val lat = LAT.find(attrs)?.groupValues?.get(1)?.toDoubleOrNull() ?: return null
+    val lon = LON.find(attrs)?.groupValues?.get(1)?.toDoubleOrNull() ?: return null
+    val ele = ELE.find(groupValues[3])?.groupValues?.get(1)?.trim()?.toDoubleOrNull() ?: 0.0
+    return RoutePoint(lat, lon, ele)
+}
+
+private fun String.unescapeXml() = replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
+private fun String.escapeXml() = replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+// The track: every trkpt/rtept/wpt except the stops toGpx writes.
 fun parseGpx(text: String): List<RoutePoint> =
-    POINT.findAll(text).mapNotNull { m ->
-        val attrs = m.groupValues[2]
-        val lat = LAT.find(attrs)?.groupValues?.get(1)?.toDoubleOrNull() ?: return@mapNotNull null
-        val lon = LON.find(attrs)?.groupValues?.get(1)?.toDoubleOrNull() ?: return@mapNotNull null
-        val ele = m.groupValues[3].let { ELE.find(it)?.groupValues?.get(1)?.trim()?.toDoubleOrNull() } ?: 0.0
-        RoutePoint(lat, lon, ele)
+    POINT.findAll(text).filterNot { it.isStop() }.mapNotNull { it.point() }.toList()
+
+// The stops toGpx wrote, in order; empty for other files.
+fun gpxStops(text: String): List<GpxStop> =
+    POINT.findAll(text).filter { it.isStop() }.mapNotNull { m ->
+        val p = m.point() ?: return@mapNotNull null
+        GpxStop(p, NAME.find(m.groupValues[3])?.groupValues?.get(1)?.takeIf { it.isNotBlank() }?.unescapeXml())
     }.toList()
 
-private val NAME = Regex("""<name>\s*([^<]*?)\s*</name>""")
-
-// The file's first <name> (the track's, in what toGpx writes), if it has one.
+// The file's first <name> (the route's, in what toGpx writes), if it has one.
 fun gpxName(text: String): String? =
-    NAME.find(text)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
-        ?.replace("&lt;", "<")?.replace("&gt;", ">")?.replace("&quot;", "\"")?.replace("&amp;", "&")
+    NAME.find(text)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }?.unescapeXml()
 
-// A one-track GPX file of [points]; what Saved stores for a route and exports. Round-trips through parseGpx.
-fun toGpx(name: String, points: List<RoutePoint>): String = buildString {
-    val safe = name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+// A one-track GPX file of [points], with the route's [stops] as typed waypoints; what Saved stores for a
+// route and exports. The name sits in <metadata> first, so it stays the file's first <name>.
+// Round-trips through parseGpx, gpxStops and gpxName.
+fun toGpx(name: String, points: List<RoutePoint>, stops: List<GpxStop> = emptyList()): String = buildString {
+    val safe = name.escapeXml()
     append("""<?xml version="1.0" encoding="UTF-8"?>""").append('\n')
     append("""<gpx version="1.1" creator="GPS Setter" xmlns="http://www.topografix.com/GPX/1/1">""").append('\n')
+    append("<metadata><name>").append(safe).append("</name></metadata>\n")
+    for (s in stops) {
+        append("""<wpt lat="${s.point.lat}" lon="${s.point.lng}">""")
+        s.name?.let { append("<name>").append(it.escapeXml()).append("</name>") }
+        append("<type>stop</type></wpt>\n")
+    }
     append("<trk><name>").append(safe).append("</name><trkseg>\n")
     for (p in points) append("""<trkpt lat="${p.lat}" lon="${p.lng}"><ele>${p.altitude}</ele></trkpt>""").append('\n')
     append("</trkseg></trk>\n</gpx>\n")

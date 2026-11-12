@@ -213,6 +213,18 @@ object RouteMath {
     }
 
     // "850 m", "4.6 km"
+    // The range to fit the camera to on one axis so that [low]..[high] lands in the part of the map that overlays
+    // leave free: [lowCovered] and [highCovered] are the covered fractions at each end (for latitude: the bottom
+    // panel and the search bar; for longitude: nothing on the west, the buttons on the east).
+    fun stretchForOverlays(low: Double, high: Double, lowCovered: Double, highCovered: Double): Pair<Double, Double> {
+        // never stretch past 5x, however much the overlays cover: scale both down to 80% together
+        val k = (0.8 / (lowCovered + highCovered)).coerceAtMost(1.0)
+        val l = lowCovered * k
+        val h = highCovered * k
+        val span = (high - low) / (1.0 - l - h)
+        return (low - span * l) to (high + span * h)
+    }
+
     fun formatDistance(meters: Double): String =
         if (meters >= 1000) String.format("%.1f km", meters / 1000) else "${meters.roundToInt()} m"
 

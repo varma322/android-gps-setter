@@ -35,6 +35,9 @@ class RoutePlaybackService : Service() {
     private var loopJob: Job? = null
     @Volatile private var paused = false
     @Volatile private var skip = false
+    // m/s and a fraction (0.12 = ±12%); set at start, and changeable while the route runs (ACTION_SET_SPEED)
+    @Volatile private var speed = 0.0
+    @Volatile private var variation = 0.0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,15 +60,20 @@ class RoutePlaybackService : Service() {
                 skip = true
                 return START_NOT_STICKY
             }
+            ACTION_SET_SPEED -> {
+                if (loopJob?.isActive != true) { stopSelf(); return START_NOT_STICKY }
+                intent.getFloatExtra(EXTRA_SPEED, 0f).takeIf { it > 0f }?.let { speed = it.toDouble() }
+                variation = intent.getFloatExtra(EXTRA_VARIATION, variation.toFloat()).toDouble()
+                return START_NOT_STICKY
+            }
         }
         val lats = intent?.getDoubleArrayExtra(EXTRA_LAT)
         val lngs = intent?.getDoubleArrayExtra(EXTRA_LNG)
         val eles = intent?.getDoubleArrayExtra(EXTRA_ELE)
-        val speed = intent?.getFloatExtra(EXTRA_SPEED, 0f) ?: 0f
-        val variation = intent?.getFloatExtra(EXTRA_VARIATION, 0f) ?: 0f
+        val startSpeed = intent?.getFloatExtra(EXTRA_SPEED, 0f) ?: 0f
         val mode = intent?.getIntExtra(EXTRA_MODE, RouteMath.ONCE) ?: RouteMath.ONCE
         val stops = intent?.getDoubleArrayExtra(EXTRA_STOPS) ?: DoubleArray(0)
-        if (lats == null || lngs == null || lats.size < 2 || lats.size != lngs.size || speed <= 0f) {
+        if (lats == null || lngs == null || lats.size < 2 || lats.size != lngs.size || startSpeed <= 0f) {
             stopEverything()
             return START_NOT_STICKY
         }
@@ -75,17 +83,17 @@ class RoutePlaybackService : Service() {
         loopJob?.cancel()
         paused = false
         skip = false
+        speed = startSpeed.toDouble()
+        variation = (intent?.getFloatExtra(EXTRA_VARIATION, 0f) ?: 0f).toDouble()
         PrefManager.routeState = RUNNING
-        loopJob = scope.launch { run(route, speed.toDouble(), variation.toDouble(), mode, stops) }
+        loopJob = scope.launch { run(route, mode, stops) }
         return START_NOT_STICKY
     }
 
-    private suspend fun run(route: List<RoutePoint>, speed: Double, variation: Double, mode: Int, stops: DoubleArray) {
+    private suspend fun run(route: List<RoutePoint>, mode: Int, stops: DoubleArray) {
         val total = RouteMath.pathLength(route)
-        val accel = speed / 4.0 // 0 to full speed (or back) in ~4 s, so starts, pauses and stops feel real
         // slow for sharp turns: brake ahead of each one (no harder than we can at this speed), then pick up again
         val corners = RouteMath.corners(route)
-        val brake = min(2.0, accel)
         val phase = Random.nextDouble(2 * PI)
         var curSpeed = 0.0
         var distance = 0.0
@@ -100,6 +108,10 @@ class RoutePlaybackService : Service() {
                 skip = false
                 distance = RouteMath.nextStop(stops, distance, dir, total)
             }
+            // full speed (or a stop) in ~4 s, so starts, pauses and stops feel real. Scaled by the higher of the
+            // set and the current speed, so slowing from 50 to 4 km/h mid-route also takes seconds, not most of a minute.
+            val accel = maxOf(speed, curSpeed) / 4.0
+            val brake = min(2.0, accel)
             val target = if (paused) 0.0 else min(
                 speed * RouteMath.speedFactor(variation, (now - start) / 1000.0, phase),
                 RouteMath.cornerLimit(corners, distance, dir, brake)
@@ -185,6 +197,7 @@ class RoutePlaybackService : Service() {
         const val ACTION_STOP = "io.github.jqssun.gpssetter.route.STOP"
         private const val ACTION_PAUSE = "io.github.jqssun.gpssetter.route.PAUSE" // toggles
         private const val ACTION_SKIP = "io.github.jqssun.gpssetter.route.SKIP"
+        private const val ACTION_SET_SPEED = "io.github.jqssun.gpssetter.route.SET_SPEED"
         private const val EXTRA_LAT = "lat"
         private const val EXTRA_LNG = "lng"
         private const val EXTRA_ELE = "ele"
@@ -218,6 +231,12 @@ class RoutePlaybackService : Service() {
 
         fun skip(context: Context) {
             context.startService(Intent(context, RoutePlaybackService::class.java).setAction(ACTION_SKIP))
+        }
+
+        // change a running route's speed and variation; ignored when nothing is playing
+        fun setSpeed(context: Context, speedMps: Float, variation: Float) {
+            context.startService(Intent(context, RoutePlaybackService::class.java).setAction(ACTION_SET_SPEED)
+                .putExtra(EXTRA_SPEED, speedMps).putExtra(EXTRA_VARIATION, variation))
         }
     }
 }

@@ -35,6 +35,21 @@ class GpxParserTest {
         assertEquals("Home <-> \"Work\" & back", gpxName(gpx)) // escaped on the way out, unescaped on the way in
     }
 
+    @Test fun stopsRoundTripApartFromTheTrack() {
+        val pts = listOf(RoutePoint(17.0, 78.0), RoutePoint(17.1, 78.1), RoutePoint(17.2, 78.2))
+        val stops = listOf(GpxStop(RoutePoint(17.0, 78.0), "Home & <garden>"), GpxStop(RoutePoint(17.15, 78.15), null), GpxStop(RoutePoint(17.2, 78.2), "Work"))
+        val gpx = toGpx("A → B", pts, stops)
+        assertEquals(pts, parseGpx(gpx)) // the stops aren't track points
+        assertEquals(stops, gpxStops(gpx))
+        assertEquals("A → B", gpxName(gpx)) // the route's name, not the first stop's
+    }
+
+    @Test fun plainWaypointsStayTrackPoints() {
+        val gpx = """<gpx><wpt lat="1.0" lon="2.0"><name>Camp</name></wpt><wpt lat="3.0" lon="4.0"/></gpx>"""
+        assertEquals(2, parseGpx(gpx).size)
+        assertTrue(gpxStops(gpx).isEmpty())
+    }
+
     @Test fun nameIsNullWithoutOne() {
         assertEquals(null, gpxName("""<gpx><trk><trkseg><trkpt lat="1" lon="2"/></trkseg></trk></gpx>"""))
     }
