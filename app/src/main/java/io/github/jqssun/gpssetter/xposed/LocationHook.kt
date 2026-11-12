@@ -98,6 +98,11 @@ object LocationHook {
         if (providerManagers.isEmpty()) return // only system_server on Android 12+ feeds fakes into the cache
         try {
             Thread.sleep(500) // let a fake the generator is already delivering land first (it ticks every 250 ms)
+            // spoofing restarted during the delay: cancel. Force a fresh read, since the usual one runs at most once
+            // a second and the stop was just read, so it would still say "off"
+            settings.refresh(force = true)
+            updateLocation()
+            if (started) return
             // never touch location while an emergency call/SMS is using it
             if (providerManagers.values.any { inEmergency(emergencyField?.get(it)) }) return
             // the switch below clears these too, except the bypass copies kept for emergency services

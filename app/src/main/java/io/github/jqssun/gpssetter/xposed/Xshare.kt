@@ -30,10 +30,11 @@ class Xshare(private val prefs: SharedPreferences, private val open: (() -> Inpu
     private var lastRead = 0L
 
     // system_server: pick up changes the framework didn't push. No-op elsewhere.
-    fun refresh() {
+    // force skips the once-a-second limit, for a decision that must see the latest state
+    fun refresh(force: Boolean = false) {
         val open = open ?: return
         val now = SystemClock.elapsedRealtime()
-        if (now - lastRead < 1000) return
+        if (!force && now - lastRead < 1000) return
         lastRead = now
         // keep the last good snapshot if the file is missing (app never synced) or mid-write
         runCatching { open().use { parse(it) } }.getOrNull()?.let { snapshot = it }
